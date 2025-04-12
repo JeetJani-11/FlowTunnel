@@ -26,7 +26,7 @@ wss.on("connection", function connection(ws) {
   });
 });
 
-app.all("*", async (req, res) => {
+app.all(/(.*)/, async (req, res) => {
   if (!connectedClient || connectedClient.readyState !== 1) {
     return res.status(503).send("WebSocket client not connected");
   }
@@ -36,7 +36,7 @@ app.all("*", async (req, res) => {
   const requestPayload = {
     correlationId,
     method: req.method,
-    url: req.url,
+    url: req.originalUrl,
     headers: req.headers,
     body: req.body,
     query: req.query,
