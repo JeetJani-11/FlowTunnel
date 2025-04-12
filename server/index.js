@@ -24,6 +24,8 @@ wss.on("connection", function connection(ws) {
     const response = JSON.parse(data);
     const { correlationId, result } = response;
 
+    console.log("Received response:", response);
+    console.log(correlationId, result);
     if (pendingResponses.has(correlationId)) {
       pendingResponses.get(correlationId)(result);
       pendingResponses.delete(correlationId);
