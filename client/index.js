@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const { console } = require("inspector");
 const readline = require("readline");
 const WebSocket = require("ws");
 
@@ -7,7 +6,7 @@ let rl;
 let isConnected = false;
 
 function connectToServer(port = 8080) {
-  const serverUrl = `ws://44.202.48.12:${port}`;
+  const serverUrl = `ws://44.202.48.12:8080`;
   const ws = new WebSocket(serverUrl);
 
   mutePrompt(); // Stop showing CLI prompt
@@ -16,13 +15,21 @@ function connectToServer(port = 8080) {
 
   ws.on("open", function () {
     console.log("Connected to remote server!");
-    ws.send("Hello from the client!");
+    ws.send({
+      type: "message",
+      message: "Connected to remote server!",
+    });
     isConnected = true;
   });
 
   ws.on("message", async function (message) {
+    const parsedMessage = JSON.parse(message);
+    if (parsedMessage.type === "message") {
+      console.log(parsedMessage.message);
+      return;
+    }
     const { correlationId, method, url, headers, body, query } =
-      JSON.parse(message);
+      parsedMessage;
 
     console.log(`Received from server: ${message}`);
 
@@ -39,6 +46,7 @@ function connectToServer(port = 8080) {
       const data = await response.json();
       ws.send(
         JSON.stringify({
+          type: "response",
           correlationId,
           result: data,
         })
@@ -47,6 +55,7 @@ function connectToServer(port = 8080) {
       console.error("Error handling request:", err);
       ws.send(
         JSON.stringify({
+          type: "response",
           correlationId,
           result: { error: err.message },
         })

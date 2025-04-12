@@ -15,6 +15,11 @@ wss.on("connection", function connection(ws) {
   connectedClient = ws;
 
   ws.on("message", function message(data) {
+    const prasedData = JSON.parse(data);
+    if (prasedData.type === "message") {
+      console.log(prasedData.message);
+      return;
+    }
     console.log("received:", data);
     const response = JSON.parse(data);
     const { correlationId, result } = response;
@@ -28,12 +33,18 @@ wss.on("connection", function connection(ws) {
 
 app.all(/(.*)/, async (req, res) => {
   if (!connectedClient || connectedClient.readyState !== 1) {
-    return res.status(503).send("WebSocket client not connected");
+    return res.status(503).send(
+      JSON.stringify({
+        type: "message",
+        message: "No WebSocket client connected",
+      })
+    );
   }
 
   const correlationId = uuidv4();
 
   const requestPayload = {
+    type: "request",
     correlationId,
     method: req.method,
     url: req.originalUrl,
