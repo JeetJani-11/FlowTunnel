@@ -1,36 +1,82 @@
 #!/usr/bin/env node
-const readline = require('readline');
-const WebSocket = require('ws');
+const { console } = require("inspector");
+const readline = require("readline");
+const WebSocket = require("ws");
 
-function connectToServer() {
-  const serverUrl = "ws://yourserver.com:8080"; 
-  try {
-    const ws = new WebSocket(serverUrl);
-  } catch (error) {
-    console.error("Error creating WebSocket:", error);
-  }
+let rl;
+let isConnected = false;
+
+function connectToServer(port = 8080) {
+  const serverUrl = `ws://44.202.48.12:${port}`;
+  const ws = new WebSocket(serverUrl);
+
+  mutePrompt(); // Stop showing CLI prompt
   console.log(`Connecting to ${serverUrl}...`);
   console.log("Please wait...");
+
   ws.on("open", function () {
-    ws.send("Hello from the client!");
     console.log("Connected to remote server!");
+    ws.send("Hello from the client!");
+    isConnected = true;
   });
 
-  ws.on("message", function (message) {
+  ws.on("message", async function (message) {
+    const { correlationId, method, url, headers, body, query } =
+      JSON.parse(message);
+
     console.log(`Received from server: ${message}`);
-  });
 
+    try {
+      const parsedUrl = new URL(url);
+      console.log(`Parsed URL: ${parsedUrl}`);
+      const path = parsedUrl.pathname + parsedUrl.search;
+      const response = await fetch(`http://localhost:${port}${path}`, {
+        method,
+        headers,
+        body: method !== "GET" && body ? JSON.stringify(body) : undefined,
+      });
+
+      const data = await response.json();
+      ws.send(
+        JSON.stringify({
+          correlationId,
+          result: data,
+        })
+      );
+    } catch (err) {
+      console.error("Error handling request:", err);
+      ws.send(
+        JSON.stringify({
+          correlationId,
+          result: { error: err.message },
+        })
+      );
+    }
+  });
   ws.on("error", function (err) {
-    console.error("WebSocket error:", err);
+    process.stdout.write(`WebSocket error: ${err.message}\n`);
   });
 
   ws.on("close", function () {
     console.log("Disconnected from the server.");
+    isConnected = false;
+    setTimeout(() => unmutePrompt(), 200);
   });
 }
 
+function mutePrompt() {
+  rl.pause();
+  readline.moveCursor(process.stdout, 0, -1);
+  readline.clearLine(process.stdout, 0);
+}
+
+function unmutePrompt() {
+  rl.resume();
+  rl.prompt(true);
+}
+
 function launchCLI() {
-  const rl = readline.createInterface({
+  rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: "my-cli> ",
@@ -38,37 +84,46 @@ function launchCLI() {
 
   console.log("Welcome to My Tunnel CLI!");
   console.log(
-    'Type "connect" to establish a connection, "help" for commands, or "exit" to quit.\n'
+    'Type "connect [port]" to connect, "help" for commands, or "exit" to quit.\n'
   );
 
-  // Display the prompt
   rl.prompt();
 
-  // Read and process each command line input
   rl.on("line", (line) => {
-    const command = line.trim().toLowerCase();
+    const [command, arg] = line.trim().split(" ");
+    const lowerCommand = command.toLowerCase();
 
-    switch (command) {
+    if (isConnected && lowerCommand !== "exit") {
+      console.log("Already connected. Type 'exit' to quit.");
+      rl.prompt();
+      return;
+    }
+
+    switch (lowerCommand) {
       case "connect":
-        console.log("Attempting to connect...");
-        connectToServer();
+        const port = parseInt(arg, 10) || 8080;
+        console.log(`Attempting to connect on port ${port}...`);
+        connectToServer(port);
         break;
 
       case "help":
         console.log("Commands available:");
-        console.log("  connect - Establish a connection to the remote server");
-        console.log("  exit    - Close the CLI");
+        console.log(
+          "  connect [port] - Connect to the server (default port: 8080)"
+        );
+        console.log("  exit           - Close the CLI");
+        rl.prompt();
         break;
 
       case "exit":
         console.log("Exiting CLI.");
         rl.close();
-        return;
+        break;
 
       default:
-        console.log(`Unknown command: "${command}"`);
+        console.log(`Unknown command: "${line.trim()}"`);
+        rl.prompt();
     }
-    rl.prompt();
   });
 
   rl.on("close", () => {
