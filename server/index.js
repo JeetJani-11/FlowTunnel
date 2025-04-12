@@ -62,11 +62,12 @@ app.all(/(.*)/, async (req, res) => {
         reject(new Error("Timeout waiting for client response"));
       }, 10000);
       pendingResponses.set(correlationId, (result) => {
+        console.log(result);
         clearTimeout(timeout);
         resolve(result);
       });
     });
-
+    console.log(response);
     res.send(response);
   } catch (err) {
     res.status(504).send(err.message);

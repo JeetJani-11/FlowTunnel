@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const readline = require("readline");
 const WebSocket = require("ws");
+const fetch = require('node-fetch');
 
 let rl;
 let isConnected = false;
@@ -15,10 +16,12 @@ function connectToServer(port = 8080) {
 
   ws.on("open", function () {
     console.log("Connected to remote server!");
-    ws.send({
-      type: "message",
-      message: "Connected to remote server!",
-    });
+    ws.send(
+      JSON.stringify({
+        type: "message",
+        message: "Connected to remote server!",
+      })
+    );
     isConnected = true;
   });
 
@@ -28,27 +31,25 @@ function connectToServer(port = 8080) {
       console.log(parsedMessage.message);
       return;
     }
-    const { correlationId, method, url, headers, body, query } =
-      parsedMessage;
+    const { correlationId, method, url, headers, body, query } = parsedMessage;
 
     console.log(`Received from server: ${message}`);
 
     try {
-      const parsedUrl = new URL(url);
-      console.log(`Parsed URL: ${parsedUrl}`);
-      const path = parsedUrl.pathname + parsedUrl.search;
-      const response = await fetch(`http://localhost:${port}${path}`, {
+      const parsedUrl = new URL(`http://localhost:${port}${url}`);
+      const response = await fetch(parsedUrl, {
         method,
         headers,
         body: method !== "GET" && body ? JSON.stringify(body) : undefined,
       });
 
-      const data = await response.json();
+
+    
       ws.send(
         JSON.stringify({
           type: "response",
           correlationId,
-          result: data,
+          result: response,
         })
       );
     } catch (err) {
