@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const readline = require("readline");
 const WebSocket = require("ws");
-const fetch = require('node-fetch');
+const fetch = require("node-fetch");
 
 let rl;
 let isConnected = false;
@@ -43,13 +43,19 @@ function connectToServer(port = 8080) {
         body: method !== "GET" && body ? JSON.stringify(body) : undefined,
       });
 
+      const buffer = await response.arrayBuffer();
+      const bodyData = Buffer.from(buffer).toString("base64");
 
-    
       ws.send(
         JSON.stringify({
           type: "response",
           correlationId,
-          result: response,
+          result: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: bodyData,
+          },
         })
       );
     } catch (err) {

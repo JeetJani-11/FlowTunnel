@@ -69,8 +69,19 @@ app.all(/(.*)/, async (req, res) => {
         resolve(result);
       });
     });
-    console.log(response);
-    res.send(response);
+
+    if (response.error) {
+      return res.status(502).send(response.error);
+    }
+
+    const { status, headers, body } = response;
+
+    for (const [key, value] of Object.entries(headers || {})) {
+      res.setHeader(key, value);
+    }
+
+    const buffer = Buffer.from(body, "base64");
+    res.status(status).send(buffer);
   } catch (err) {
     res.status(504).send(err.message);
   }
