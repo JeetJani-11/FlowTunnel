@@ -80,8 +80,7 @@ app.all(/(.*)/, async (req, res) => {
       res.setHeader(key, value);
     }
 
-    const buffer = Buffer.from(body, "base64");
-    res.status(status).send(buffer);
+    res.status(status).send(body);
   } catch (err) {
     res.status(504).send(err.message);
   }

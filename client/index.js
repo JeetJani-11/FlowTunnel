@@ -37,6 +37,7 @@ function connectToServer(port = 8080) {
 
     try {
       const parsedUrl = new URL(`http://localhost:${port}${url}`);
+      console.log(`Parsed URL: ${parsedUrl}`);
       const response = await fetch(parsedUrl, {
         method,
         headers,
