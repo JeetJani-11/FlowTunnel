@@ -1,6 +1,7 @@
 "use client";
-import firebase_app from "../firebase/config";
-import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
+import { db, auth } from "@/firebase/config";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -31,15 +32,17 @@ const GlassCard = styled(Card)({
 });
 
 export default function Home() {
-  const auth = getAuth(firebase_app);
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [rawToken, setRawToken] = useState<string | null>(null);
+  const [maskedTokens, setMaskedTokens] = useState<string[]>([]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
         setLoading(false);
       } else {
         router.push("/login");
@@ -48,16 +51,47 @@ export default function Home() {
     return () => unsubscribe();
   }, [auth, router]);
 
-  const handleCopyUUID = () => {
-    navigator.clipboard.writeText(user?.uid || "");
+  useEffect(() => {
+    const fetchTokens = async () => {
+      if (!user) return;
+      const tokensQ = query(
+        collection(db, "apiKeys"),
+        where("uid", "==", user.uid)
+      );
+      const snap = await getDocs(tokensQ);
+      const masks: string[] = [];
+      snap.forEach((doc) => {
+        const data = doc.data();
+        if (data.hashedKey) {
+          masks.push("*".repeat(data.hashedKey.length));
+        }
+      });
+      setMaskedTokens(masks);
+    };
+    fetchTokens();
+  }, [user]);
+
+  const handleGenerateToken = async () => {
+    if (!user) return;
+    const res = await fetch("/api/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: user.uid }),
+    });
+    const { apiKey } = await res.json();
+    setRawToken(apiKey);
+  };
+
+  const handleCopy = (value: string) => {
+    navigator.clipboard.writeText(value);
   };
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
       router.push("/login");
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -106,31 +140,63 @@ export default function Home() {
 
       <Box flex={1} display="flex" justifyContent="center" alignItems="center">
         <GlassCard>
-          <Typography variant="h6" gutterBottom sx={{ color: "#90e0ef" }}>
-            Token
-          </Typography>
-
-          <Box display="flex" alignItems="center" gap={2}>
-            <Typography
-              variant="body1"
-              sx={{
-                fontFamily: "monospace",
-                wordBreak: "break-all",
-                color: "#caf0f8",
-              }}
-            >
-              {user?.uid}
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="h6" sx={{ color: "#90e0ef" }}>
+              Token
             </Typography>
+            <Button variant="contained" onClick={handleGenerateToken}>
+              Generate Token
+            </Button>
+          </Box>
 
-            <IconButton
-              onClick={handleCopyUUID}
-              sx={{
-                color: "#90e0ef",
-                "&:hover": { background: "rgba(144,224,239,0.1)" },
-              }}
-            >
-              <ContentCopyIcon fontSize="small" />
-            </IconButton>
+          <Box display="flex" flexDirection="column" gap={2}>
+            {rawToken && (
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <Typography
+                  variant="body1"
+                  sx={{ fontFamily: "monospace", color: "#caf0f8" }}
+                >
+                  {rawToken}
+                </Typography>
+                <IconButton onClick={() => handleCopy(rawToken)}>
+                  <ContentCopyIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
+
+            {maskedTokens.length > 0 && (
+              <Box mt={2}>
+                {maskedTokens.map((mask, i) => (
+                  <Typography
+                    key={i}
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                      color: "rgba(202,240,248,0.4)",
+                    }}
+                  >
+                    {mask}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+            {maskedTokens.length === 0 && rawToken == null && (
+              <Typography
+                variant="body2"
+                sx={{ fontFamily: "monospace", color: "#caf0f8" }}
+              >
+                No tokens generated yet.
+              </Typography>
+            )}
           </Box>
         </GlassCard>
       </Box>
@@ -146,26 +212,6 @@ export default function Home() {
           }}
         />
       </Box>
-
-      {/* Animated background elements */}
-      <Box
-        sx={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: -1,
-          background:
-            "radial-gradient(circle at 50% 50%, rgba(16, 64, 128, 0.1) 0%, transparent 70%)",
-          animation: "pulse 8s infinite",
-          "@keyframes pulse": {
-            "0%": { transform: "scale(1)" },
-            "50%": { transform: "scale(1.05)" },
-            "100%": { transform: "scale(1)" },
-          },
-        }}
-      />
     </GradientBackground>
   );
 }

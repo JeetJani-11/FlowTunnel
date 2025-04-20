@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "node-fetch": "^2.7.0",
+    "node-localstorage": "^3.0.5",
     "ws": "^8.18.1"
   }
 }

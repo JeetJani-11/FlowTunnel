@@ -1,51 +1,111 @@
 import express from "express";
-import { WebSocketServer } from "ws";
-import { v4 as uuidv4 } from "uuid"; // npm install uuid
+import http from "http";
+import { Server as SocketIO } from "socket.io";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import { v4 as uuidv4 } from "uuid";
+import { initializeApp, getApps } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+} from "firebase/firestore";
+import dotenv from "dotenv";
+dotenv.config();
+
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+};
+const firebaseApp =
+  getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const db = getFirestore(firebaseApp);
 
 const app = express();
 app.use(express.json());
+const server = http.createServer(app);
 
-const wss = new WebSocketServer({ host: "0.0.0.0", port: 8080 });
-let connectedClient = null;
+const io = new SocketIO(server, {
+  cors: { origin: "*" },
+});
 
-const pendingResponses = new Map();
+io.on("connection", (socket) => {
+  console.log("⚡ Socket.IO client connected:", socket.id);
 
-wss.on("connection", function connection(ws) {
-  console.log("WebSocket client connected");
-  connectedClient = ws;
-
-  ws.on("message", function message(data) {
-    const prasedData = JSON.parse(data);
-    if (prasedData.type === "message") {
-      console.log(prasedData.message);
-      return;
+  socket.on("login", ({ accessToken }) => {
+    try {
+      const payload = jwt.verify(accessToken, process.env.JWT_SECRET);
+      const uid = payload.uid;
+      socket.data.uid = uid;
+      socket.join(uid);
+      socket.emit("message", "Logged in");
+    } catch {
+      socket.emit("message", "Invalid access token");
+      socket.disconnect(true);
     }
-    console.log("received:", data);
-    const response = JSON.parse(data);
-    const { correlationId, result } = response;
+  });
 
-    console.log("Received response:", response);
-    console.log(correlationId, result);
-    if (pendingResponses.has(correlationId)) {
-      pendingResponses.get(correlationId)(result);
-      pendingResponses.delete(correlationId);
-    }
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
   });
 });
 
-app.all(/(.*)/, async (req, res) => {
-  if (!connectedClient || connectedClient.readyState !== 1) {
-    return res.status(503).send(
-      JSON.stringify({
-        type: "message",
-        message: "No WebSocket client connected",
-      })
-    );
+app.post("/login", async (req, res) => {
+  const apiKey = req.body.apiKey;
+  if (!apiKey) return res.status(400).send("API key required");
+  const hashedKey = await bcrypt.hash(apiKey + process.env.TOKEN_PEPPER, 10);
+  const prefix = hashedKey.slice(0, 8);
+  const snap = await getDocs(
+    query(collection(db, "apiKeys"), where("prefix", "==", prefix))
+  );
+  let matchedUid = null;
+  for (const doc of snap.docs) {
+    const { hashedKey, uid } = doc.data();
+    if (await bcrypt.compare(apiKey + process.env.TOKEN_PEPPER, hashedKey)) {
+      matchedUid = uid;
+      break;
+    }
   }
+  if (!matchedUid) return res.status(401).send("Invalid API key");
 
+  const accessToken = jwt.sign({ uid: matchedUid }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
+  const refreshToken = jwt.sign({ uid: matchedUid }, process.env.JWT_SECRET, {
+    expiresIn: "7d",
+  });
+  return res.json({ accessToken, refreshToken });
+});
+
+app.post("/refreshToken", (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).send("Refresh token required");
+  try {
+    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const uid = payload.uid;
+    const newAccess = jwt.sign({ uid }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    const newRefresh = jwt.sign({ uid }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+    return res.json({ accessToken: newAccess, refreshToken: newRefresh });
+  } catch {
+    return res.status(401).send("Invalid refresh token");
+  }
+});
+
+app.all("/*", async (req, res) => {
   const correlationId = uuidv4();
-
-  const requestPayload = {
+  const payload = {
     type: "request",
     correlationId,
     method: req.method,
@@ -54,38 +114,14 @@ app.all(/(.*)/, async (req, res) => {
     body: req.body,
     query: req.query,
   };
-
-  connectedClient.send(JSON.stringify(requestPayload));
-
-  try {
-    const response = await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pendingResponses.delete(correlationId);
-        reject(new Error("Timeout waiting for client response"));
-      }, 10000);
-      pendingResponses.set(correlationId, (result) => {
-        console.log(result);
-        clearTimeout(timeout);
-        resolve(result);
-      });
-    });
-
-    if (response.error) {
-      return res.status(502).send(response.error);
-    }
-
-    const { status, headers, body } = response;
-
-    for (const [key, value] of Object.entries(headers || {})) {
-      res.setHeader(key, value);
-    }
-
-    res.status(status).send(body);
-  } catch (err) {
-    res.status(504).send(err.message);
-  }
+  io.emit("request", payload, (result) => {
+    if (result.error) return res.status(502).send(result.error);
+    const { status, headers, body } = result;
+    Object.entries(headers || {}).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(status).send(body);
+  });
 });
 
-app.listen(3000, () => {
-  console.log("HTTP Server is running on port 3000");
+server.listen(3000, () => {
+  console.log("HTTP+Socket.IO server listening on port 3000");
 });

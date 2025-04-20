@@ -1,22 +1,37 @@
 #!/usr/bin/env node
 const readline = require("readline");
-const WebSocket = require("ws");
+const { io } = require("socket.io-client");
 const fetch = require("node-fetch");
+import { LocalStorage } from "node-localstorage";
+const localStorage = new LocalStorage("./scratch");
 
 let rl;
 let isConnected = false;
-
+const serverUrl = "http://localhost:3000";
+let tried = false;
 function connectToServer(port = 8080) {
-  const serverUrl = `ws://44.202.48.12:8080`;
-  const ws = new WebSocket(serverUrl);
+  const socketUrl = `http://44.202.48.12:8080`;
+  const socket = io(socketUrl, {
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 20000,
+  });
 
-  mutePrompt(); // Stop showing CLI prompt
-  console.log(`Connecting to ${serverUrl}...`);
+  mutePrompt();
+  console.log(`Connecting to ${socketUrl}...`);
   console.log("Please wait...");
-
-  ws.on("open", function () {
+  const accessToken = localStorage.getItem("accessToken");
+  const refreshToken = localStorage.getItem("refreshToken");
+  if (!accessToken) {
+    console.log("Please login first.");
+    unmutePrompt();
+    return;
+  }
+  socket.on("connect", () => {
     console.log("Connected to remote server!");
-    ws.send(
+    socket.send(
       JSON.stringify({
         type: "message",
         message: "Connected to remote server!",
@@ -24,61 +39,113 @@ function connectToServer(port = 8080) {
     );
     isConnected = true;
   });
+  socket.emit("login", { accessToken });
 
-  ws.on("message", async function (message) {
+  socket.on("message", async (message) => {
     const parsedMessage = JSON.parse(message);
     if (parsedMessage.type === "message") {
+      if (parsedMessage.message === "Invalid access token") {
+        if (tried) {
+          console.log("Please login again.");
+          socket.disconnect();
+          isConnected = false;
+          unmutePrompt();
+          return;
+        }
+        tried = true;
+        const response = await fetch(`${serverUrl}/refreshToken`, {
+          method: "POST",
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (response.ok) {
+          const { accessToken, refreshToken } = await response.json();
+          localStorage.setItem("accessToken", accessToken);
+          localStorage.setItem("refreshToken", refreshToken);
+          socket.emit("login", { accessToken });
+          console.log("Token refreshed successfully.");
+        } else {
+          console.log("Failed to refresh token:", response.statusText);
+          socket.disconnect();
+          isConnected = false;
+          unmutePrompt();
+        }
+      }
       console.log(parsedMessage.message);
       return;
     }
-    const { correlationId, method, url, headers, body, query } = parsedMessage;
+  });
 
-    console.log(`Received from server: ${message}`);
+  socket.on(
+    "request",
+    async ({ correlationId, method, url, headers, body }) => {
+      console.log(`Received request ${correlationId}: ${method} ${url}`);
 
-    try {
-      const parsedUrl = new URL(`http://localhost:${port}${url}`);
-      console.log(`Parsed URL: ${parsedUrl}`);
-      const response = await fetch(parsedUrl, {
-        method,
-        headers,
-        body: method !== "GET" && body ? JSON.stringify(body) : undefined,
-      });
+      try {
+        const parsedUrl = new URL(`http://localhost:${port}${url}`);
+        console.log(`Parsed URL: ${parsedUrl}`);
+        const response = await fetch(parsedUrl, {
+          method,
+          headers,
+          body: method !== "GET" && body ? JSON.stringify(body) : undefined,
+        });
 
-      const buffer = await response.arrayBuffer();
-      const bodyData = Buffer.from(buffer).toString("base64");
+        const buffer = await response.arrayBuffer();
+        const bodyData = Buffer.from(buffer).toString("base64");
 
-      ws.send(
-        JSON.stringify({
-          type: "response",
-          correlationId,
-          result: {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-            body: bodyData,
-          },
-        })
-      );
-    } catch (err) {
-      console.error("Error handling request:", err);
-      ws.send(
-        JSON.stringify({
-          type: "response",
-          correlationId,
-          result: { error: err.message },
-        })
-      );
+        socket.send(
+          JSON.stringify({
+            type: "response",
+            correlationId,
+            result: {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+              body: bodyData,
+            },
+          })
+        );
+      } catch (err) {
+        console.error("Error handling request:", err);
+        socket.send(
+          JSON.stringify({
+            type: "response",
+            correlationId,
+            result: { error: err.message },
+          })
+        );
+      }
     }
-  });
-  ws.on("error", function (err) {
-    process.stdout.write(`WebSocket error: ${err.message}\n`);
+  );
+  socket.on("error", (err) => {
+    process.stdout.write(`Socket error: ${err.message}\n`);
   });
 
-  ws.on("close", function () {
+  socket.on("disconnect", () => {
     console.log("Disconnected from the server.");
     isConnected = false;
     setTimeout(() => unmutePrompt(), 200);
   });
+}
+
+async function handleLogin(token) {
+  try {
+    const response = await fetch(`${serverUrl}/login`, {
+      method: "POST",
+      body: JSON.stringify({ apiKey: token }),
+    });
+    if (response.ok) {
+      const { accessToken, refreshToken } = await response.json();
+      // save tokens to local storage
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+      console.log("Login successful.");
+    } else {
+      console.log("Login failed:", response.statusText);
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+  }
+  rl.prompt();
 }
 
 function mutePrompt() {
@@ -101,7 +168,7 @@ function launchCLI() {
 
   console.log("Welcome to My Tunnel CLI!");
   console.log(
-    'Type "connect [port]" to connect, "help" for commands, or "exit" to quit.\n'
+    'Type "connect [port]" to connect, "login [token]" to authenticate, "help" for commands, or "exit" to quit.\n'
   );
 
   rl.prompt();
@@ -117,17 +184,30 @@ function launchCLI() {
     }
 
     switch (lowerCommand) {
-      case "connect":
+      case "connect": {
         const port = parseInt(arg, 10) || 8080;
         console.log(`Attempting to connect on port ${port}...`);
         connectToServer(port);
         break;
+      }
+
+      case "login": {
+        const token = arg;
+        if (!token) {
+          console.log("Please provide a token.");
+          rl.prompt();
+        } else {
+          handleLogin(token);
+        }
+        break;
+      }
 
       case "help":
         console.log("Commands available:");
         console.log(
           "  connect [port] - Connect to the server (default port: 8080)"
         );
+        console.log("  login [token]  - Authenticate with Bearer token");
         console.log("  exit           - Close the CLI");
         rl.prompt();
         break;
