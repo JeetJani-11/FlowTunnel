@@ -7,7 +7,7 @@ const localStorage = new LocalStorage("./scratch");
 
 let rl;
 let isConnected = false;
-const serverUrl = "http://44.202.48.12:3000";
+const serverUrl = "http://44.202.48.12";
 let tried = false;
 function connectToServer(port = 8080) {
   const socketUrl = `http://44.202.48.12:8080`;
@@ -131,6 +131,7 @@ async function handleLogin(token) {
   try {
     const response = await fetch(`${serverUrl}/login`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ apiKey: token }),
     });
     console.log("Response status:", response.status);

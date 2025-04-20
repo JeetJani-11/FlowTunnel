@@ -64,12 +64,14 @@ app.post("/login", async (req, res) => {
   if (!apiKey) return res.status(400).send("API key required");
   const hashedKey = await bcrypt.hash(apiKey + process.env.TOKEN_PEPPER, 10);
   const prefix = hashedKey.slice(0, 8);
+  console.log("Prefix:", prefix);
   const snap = await getDocs(
     query(collection(db, "apiKeys"), where("prefix", "==", prefix))
   );
   let matchedUid = null;
   for (const doc of snap.docs) {
     const { hashedKey, uid } = doc.data();
+    console.log("Checking hashed key:", hashedKey);
     if (await bcrypt.compare(apiKey + process.env.TOKEN_PEPPER, hashedKey)) {
       matchedUid = uid;
       break;
