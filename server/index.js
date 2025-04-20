@@ -122,6 +122,8 @@ app.all(/(.*)/, async (req, res) => {
     query: req.query,
   };
   io.emit("request", payload, (result) => {
+    console.log("Received response for request:", correlationId);
+    console.log("Response:", result);
     if (result.error) return res.status(502).send(result.error);
     const { status, headers, body } = result;
     Object.entries(headers || {}).forEach(([k, v]) => res.setHeader(k, v));

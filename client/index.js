@@ -42,8 +42,7 @@ function connectToServer(port) {
   socket.emit("login", { accessToken });
 
   socket.on("message", async (message) => {
-    const parsedMessage = JSON.parse(message);
-    if (parsedMessage.content === "Invalid access token") {
+    if (message.content === "Invalid access token") {
       if (tried) {
         console.log("Please login again.");
         socket.disconnect();
@@ -69,51 +68,34 @@ function connectToServer(port) {
         unmutePrompt();
       }
     }
-    console.log(parsedMessage.message);
+    console.log(message.content);
     return;
   });
 
-  socket.on(
-    "request",
-    async ({ correlationId, method, url, headers, body }) => {
-      console.log(`Received request ${correlationId}: ${method} ${url}`);
+  socket.on("request", async (payload, acknowledge) => {
+    const { correlationId, method, url, headers, body } = payload;
+    console.log(`Received request ${correlationId}: ${method} ${url}`);
 
-      try {
-        const parsedUrl = new URL(`http://localhost:${port}${url}`);
-        console.log(`Parsed URL: ${parsedUrl}`);
-        const response = await fetch(parsedUrl, {
-          method,
-          headers,
-          body: method !== "GET" && body ? JSON.stringify(body) : undefined,
-        });
+    try {
+      const parsedUrl = new URL(`http://localhost:${port}${url}`);
+      const response = await fetch(parsedUrl, {
+        method,
+        headers,
+        body: method !== "GET" && body ? JSON.stringify(body) : undefined,
+      });
 
-        const buffer = await response.arrayBuffer();
-        const bodyData = Buffer.from(buffer).toString("base64");
-
-        socket.send(
-          JSON.stringify({
-            type: "response",
-            correlationId,
-            result: {
-              status: response.status,
-              statusText: response.statusText,
-              headers: Object.fromEntries(response.headers.entries()),
-              body: bodyData,
-            },
-          })
-        );
-      } catch (err) {
-        console.error("Error handling request:", err);
-        socket.send(
-          JSON.stringify({
-            type: "response",
-            correlationId,
-            result: { error: err.message },
-          })
-        );
-      }
+      const buffer = await response.arrayBuffer();
+      const bodyData = Buffer.from(buffer).toString("base64");
+      acknowledge({
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        body: bodyData,
+      });
+    } catch (err) {
+      console.error("Error handling request:", err);
+      acknowledge({ error: err.message });
     }
-  );
+  });
   socket.on("error", (err) => {
     process.stdout.write(`Socket error: ${err.message}\n`);
   });
