@@ -59,6 +59,7 @@ io.on("connection", (socket) => {
 });
 
 app.post("/login", async (req, res) => {
+  console.log("Login request received");
   const apiKey = req.body.apiKey;
   if (!apiKey) return res.status(400).send("API key required");
   const hashedKey = await bcrypt.hash(apiKey + process.env.TOKEN_PEPPER, 10);
@@ -86,6 +87,7 @@ app.post("/login", async (req, res) => {
 });
 
 app.post("/refreshToken", (req, res) => {
+  console.log("Refresh token request received");
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).send("Refresh token required");
   try {
@@ -104,6 +106,7 @@ app.post("/refreshToken", (req, res) => {
 });
 
 app.all(/(.*)/, async (req, res) => {
+  console.log("All request received:", req.method, req.originalUrl);
   const correlationId = uuidv4();
   const payload = {
     type: "request",

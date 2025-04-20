@@ -4,7 +4,6 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import "./globals.css";
-import { ReduxProvider } from "./ClientProvider";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -19,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ReduxProvider>{children}</ReduxProvider>
+       {children}
       </body>
     </html>
   );

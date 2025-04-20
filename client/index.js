@@ -2,12 +2,12 @@
 const readline = require("readline");
 const { io } = require("socket.io-client");
 const fetch = require("node-fetch");
-import { LocalStorage } from "node-localstorage";
+const { LocalStorage } = require("node-localstorage");
 const localStorage = new LocalStorage("./scratch");
 
 let rl;
 let isConnected = false;
-const serverUrl = "http://localhost:3000";
+const serverUrl = "http://44.202.48.12:3000";
 let tried = false;
 function connectToServer(port = 8080) {
   const socketUrl = `http://44.202.48.12:8080`;
@@ -133,6 +133,8 @@ async function handleLogin(token) {
       method: "POST",
       body: JSON.stringify({ apiKey: token }),
     });
+    console.log("Response status:", response.status);
+    console.log("Response " , response);
     if (response.ok) {
       const { accessToken, refreshToken } = await response.json();
       // save tokens to local storage
