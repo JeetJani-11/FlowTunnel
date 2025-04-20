@@ -122,10 +122,15 @@ app.all(/^\/(?!socket\.io).*/, async (req, res) => {
     query: req.query,
   };
   io.timeout(60000).emit("request", payload, (error, result) => {
+    console.log(result);
     if (error) return res.status(502).send(error);
     const { status, headers, body } = result[0];
     const raw = Buffer.from(body, "base64");
-    const forbidden = new Set(["content-encoding","transfer-encoding","content-length"]);
+    const forbidden = new Set([
+      "content-encoding",
+      "transfer-encoding",
+      "content-length",
+    ]);
     for (let [k, v] of Object.entries(headers)) {
       if (forbidden.has(k.toLowerCase())) continue;
       res.setHeader(k, v);
