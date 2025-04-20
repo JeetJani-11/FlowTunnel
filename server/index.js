@@ -126,7 +126,6 @@ app.all(/^\/(?!socket\.io).*/, async (req, res) => {
     console.log(result);
     if (error) return res.status(502).send(error);
     const { status, headers, body } = result[0];
-    const raw = Buffer.from(body, "base64");
     const forbidden = new Set([
       "content-encoding",
       "transfer-encoding",
@@ -136,7 +135,7 @@ app.all(/^\/(?!socket\.io).*/, async (req, res) => {
       if (forbidden.has(k.toLowerCase())) continue;
       res.setHeader(k, v);
     }
-    res.status(status).send(raw);
+    res.status(status).send(body);
   });
 });
 
