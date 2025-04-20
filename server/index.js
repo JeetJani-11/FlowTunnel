@@ -103,7 +103,7 @@ app.post("/refreshToken", (req, res) => {
   }
 });
 
-app.all("/*", async (req, res) => {
+app.all(/(.*)/, async (req, res) => {
   const correlationId = uuidv4();
   const payload = {
     type: "request",
