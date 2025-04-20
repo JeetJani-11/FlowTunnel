@@ -34,11 +34,6 @@ const app = express();
 app.use(express.json());
 const server = http.createServer(app);
 
-function makePrefix(apiKey) {
-  const hmac = crypto.createHmac("sha256", process.env.TOKEN_PEPPER);
-  hmac.update(apiKey);
-  return hmac.digest("hex").slice(0, 8);
-}
 const io = new SocketIO(server, {
   cors: { origin: "*" },
 });
@@ -52,7 +47,7 @@ io.on("connection", (socket) => {
       const uid = payload.uid;
       socket.data.uid = uid;
       socket.join(uid);
-      socket.emit("message", "Logged in");
+      socket.emit("message", {content : "Login successful"});
     } catch {
       socket.emit("message", "Invalid access token");
       socket.disconnect(true);

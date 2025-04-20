@@ -9,8 +9,8 @@ let rl;
 let isConnected = false;
 const serverUrl = "http://44.202.48.12";
 let tried = false;
-function connectToServer(port = 8080) {
-  const socketUrl = `http://44.202.48.12:8080`;
+function connectToServer(port) {
+  const socketUrl = `http://44.202.48.12:3000`;
   const socket = io(socketUrl, {
     reconnection: true,
     reconnectionAttempts: 5,
@@ -43,36 +43,34 @@ function connectToServer(port = 8080) {
 
   socket.on("message", async (message) => {
     const parsedMessage = JSON.parse(message);
-    if (parsedMessage.type === "message") {
-      if (parsedMessage.message === "Invalid access token") {
-        if (tried) {
-          console.log("Please login again.");
-          socket.disconnect();
-          isConnected = false;
-          unmutePrompt();
-          return;
-        }
-        tried = true;
-        const response = await fetch(`${serverUrl}/refreshToken`, {
-          method: "POST",
-          body: JSON.stringify({ refreshToken }),
-        });
-        if (response.ok) {
-          const { accessToken, refreshToken } = await response.json();
-          localStorage.setItem("accessToken", accessToken);
-          localStorage.setItem("refreshToken", refreshToken);
-          socket.emit("login", { accessToken });
-          console.log("Token refreshed successfully.");
-        } else {
-          console.log("Failed to refresh token:", response.statusText);
-          socket.disconnect();
-          isConnected = false;
-          unmutePrompt();
-        }
+    if (parsedMessage.content === "Invalid access token") {
+      if (tried) {
+        console.log("Please login again.");
+        socket.disconnect();
+        isConnected = false;
+        unmutePrompt();
+        return;
       }
-      console.log(parsedMessage.message);
-      return;
+      tried = true;
+      const response = await fetch(`${serverUrl}/refreshToken`, {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (response.ok) {
+        const { accessToken, refreshToken } = await response.json();
+        localStorage.setItem("accessToken", accessToken);
+        localStorage.setItem("refreshToken", refreshToken);
+        socket.emit("login", { accessToken });
+        console.log("Token refreshed successfully.");
+      } else {
+        console.log("Failed to refresh token:", response.statusText);
+        socket.disconnect();
+        isConnected = false;
+        unmutePrompt();
+      }
     }
+    console.log(parsedMessage.message);
+    return;
   });
 
   socket.on(
@@ -135,7 +133,7 @@ async function handleLogin(token) {
       body: JSON.stringify({ apiKey: token }),
     });
     console.log("Response status:", response.status);
-    console.log("Response " , response);
+    console.log("Response ", response);
     if (response.ok) {
       const { accessToken, refreshToken } = await response.json();
       // save tokens to local storage
