@@ -36,7 +36,7 @@ const server = http.createServer(app);
 
 const io = new SocketIO(server, {
   cors: { origin: "*" },
-  maxHttpBufferSize: 10 * 1024 * 1024,
+  maxHttpBufferSize: 100 * 1024 * 1024,
 });
 
 io.on("connection", (socket) => {
