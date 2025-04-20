@@ -125,10 +125,9 @@ app.all(/^\/(?!socket\.io).*/, async (req, res) => {
     if (error) return res.status(502).send(error);
     const { status, headers, body } = result[0];
     const raw = Buffer.from(body, "base64");
-    delete headers["content-encoding"];
-    delete headers["transfer-encoding"];
-    delete headers["content-length"];
-    for (const [k, v] of Object.entries(headers)) {
+    const forbidden = new Set(["content-encoding","transfer-encoding","content-length"]);
+    for (let [k, v] of Object.entries(headers)) {
+      if (forbidden.has(k.toLowerCase())) continue;
       res.setHeader(k, v);
     }
     res.status(status).send(raw);
