@@ -109,7 +109,7 @@ app.post("/refreshToken", (req, res) => {
   }
 });
 
-app.all(/(.*)/, async (req, res) => {
+app.all(/^\/(?!socket\.io).*/, async (req, res) => {
   console.log("All request received:", req.method, req.originalUrl);
   const correlationId = uuidv4();
   const payload = {
@@ -123,16 +123,15 @@ app.all(/(.*)/, async (req, res) => {
   };
   io.timeout(60000).emit("request", payload, (error, result) => {
     if (error) return res.status(502).send(error);
-    const { status, headers: rawHeaders, body: base64Body } = result[0];
-    const headers = { ...rawHeaders };
+    const { status, headers, body } = result[0];
+    const raw = Buffer.from(body, "base64");
     delete headers["content-encoding"];
     delete headers["transfer-encoding"];
     delete headers["content-length"];
-
-    Object.entries(headers).forEach(([k, v]) => res.setHeader(k, v));
-
-    const buffer = Buffer.from(base64Body, "base64");
-    return res.status(status).send(buffer);
+    for (const [k, v] of Object.entries(headers)) {
+      res.setHeader(k, v);
+    }
+    res.status(status).send(raw);
   });
 });
 
