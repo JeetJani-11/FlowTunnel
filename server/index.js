@@ -1,5 +1,6 @@
 import express from "express";
 import http from "http";
+import crypto from "crypto";
 import { Server as SocketIO } from "socket.io";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
@@ -33,6 +34,11 @@ const app = express();
 app.use(express.json());
 const server = http.createServer(app);
 
+function makePrefix(apiKey) {
+  const hmac = crypto.createHmac("sha256", process.env.TOKEN_PEPPER);
+  hmac.update(apiKey);
+  return hmac.digest("hex").slice(0, 8);
+}
 const io = new SocketIO(server, {
   cors: { origin: "*" },
 });
@@ -61,9 +67,9 @@ io.on("connection", (socket) => {
 app.post("/login", async (req, res) => {
   console.log("Login request received");
   const apiKey = req.body.apiKey;
+  const rawKey = apiKey.slice(8);
   if (!apiKey) return res.status(400).send("API key required");
-  const hashedKey = await bcrypt.hash(apiKey + process.env.TOKEN_PEPPER, 10);
-  const prefix = hashedKey.slice(0, 8);
+  const prefix = apiKey.slice(0, 8);
   console.log("Prefix:", prefix);
   const snap = await getDocs(
     query(collection(db, "apiKeys"), where("prefix", "==", prefix))
@@ -72,7 +78,8 @@ app.post("/login", async (req, res) => {
   for (const doc of snap.docs) {
     const { hashedKey, uid } = doc.data();
     console.log("Checking hashed key:", hashedKey);
-    if (await bcrypt.compare(apiKey + process.env.TOKEN_PEPPER, hashedKey)) {
+    
+    if (await bcrypt.compare(rawKey + process.env.TOKEN_PEPPER, hashedKey)) {
       matchedUid = uid;
       break;
     }
