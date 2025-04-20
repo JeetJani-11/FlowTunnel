@@ -50,7 +50,7 @@ io.on("connection", (socket) => {
       socket.join(uid);
       socket.emit("message", { content: "Login successful" });
     } catch {
-      socket.emit("message", "Invalid access token");
+      socket.emit("message", { content: "Invalid access token" });
       socket.disconnect(true);
     }
   });

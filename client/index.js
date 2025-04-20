@@ -43,6 +43,7 @@ function connectToServer(port) {
 
   socket.on("message", async (message) => {
     if (message.content === "Invalid access token") {
+      console.log("Invalid access token. Please login again.");
       if (tried) {
         console.log("Please login again.");
         socket.disconnect();
@@ -55,10 +56,13 @@ function connectToServer(port) {
         method: "POST",
         body: JSON.stringify({ refreshToken }),
       });
+      console.log("Response status:", response.status);
+      console.log("Response ", response);
       if (response.ok) {
         const { accessToken, refreshToken } = await response.json();
         localStorage.setItem("accessToken", accessToken);
         localStorage.setItem("refreshToken", refreshToken);
+        console.log("Tokens refreshed successfully.");
         socket.emit("login", { accessToken });
         console.log("Token refreshed successfully.");
       } else {
