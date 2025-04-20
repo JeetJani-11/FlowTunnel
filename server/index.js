@@ -125,7 +125,8 @@ app.all(/(.*)/, async (req, res) => {
     if (error) return res.status(502).send(error);
     console.log("Received response for request:", correlationId);
     console.log("Response:", result);
-    const { status, headers, body } = result;
+    console.log("Response size:", result.length);
+    const { status, headers, body } = result[0];
     Object.entries(headers || {}).forEach(([k, v]) => res.setHeader(k, v));
     return res.status(status).send(body);
   });
