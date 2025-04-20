@@ -76,10 +76,10 @@ app.post("/login", async (req, res) => {
   );
   let matchedUid = null;
   for (const doc of snap.docs) {
-    const { hashedKey, uid } = doc.data();
-    console.log("Checking hashed key:", hashedKey);
+    const { hashed, uid } = doc.data();
+    console.log("Checking hashed key:", hashed);
     
-    if (await bcrypt.compare(rawKey + process.env.TOKEN_PEPPER, hashedKey)) {
+    if (await bcrypt.compare(rawKey + process.env.TOKEN_PEPPER, hashed)) {
       matchedUid = uid;
       break;
     }
