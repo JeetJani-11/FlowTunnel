@@ -51,7 +51,6 @@ io.on("connection", (socket) => {
       socket.emit("message", { content: "Login successful" });
     } catch {
       socket.emit("message", { content: "Invalid access token" });
-      socket.disconnect(true);
     }
   });
 
@@ -93,6 +92,7 @@ app.post("/login", async (req, res) => {
 
 app.post("/refreshToken", (req, res) => {
   console.log("Refresh token request received");
+  console.log("Request body:", req.body);
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).send("Refresh token required");
   try {
