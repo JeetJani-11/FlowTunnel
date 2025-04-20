@@ -47,7 +47,7 @@ io.on("connection", (socket) => {
       const uid = payload.uid;
       socket.data.uid = uid;
       socket.join(uid);
-      socket.emit("message", {content : "Login successful"});
+      socket.emit("message", { content: "Login successful" });
     } catch {
       socket.emit("message", "Invalid access token");
       socket.disconnect(true);
@@ -73,7 +73,7 @@ app.post("/login", async (req, res) => {
   for (const doc of snap.docs) {
     const { hashed, uid } = doc.data();
     console.log("Checking hashed key:", hashed);
-    
+
     if (await bcrypt.compare(rawKey + process.env.TOKEN_PEPPER, hashed)) {
       matchedUid = uid;
       break;
@@ -123,12 +123,16 @@ app.all(/(.*)/, async (req, res) => {
   };
   io.timeout(60000).emit("request", payload, (error, result) => {
     if (error) return res.status(502).send(error);
-    console.log("Received response for request:", correlationId);
-    console.log("Response:", result);
-    console.log("Response size:", result.length);
-    const { status, headers, body } = result[0];
-    Object.entries(headers || {}).forEach(([k, v]) => res.setHeader(k, v));
-    return res.status(status).send(body);
+    const { status, headers: rawHeaders, body: base64Body } = result[0];
+    const headers = { ...rawHeaders };
+    delete headers["content-encoding"];
+    delete headers["transfer-encoding"];
+    delete headers["content-length"];
+
+    Object.entries(headers).forEach(([k, v]) => res.setHeader(k, v));
+
+    const buffer = Buffer.from(base64Body, "base64");
+    return res.status(status).send(buffer);
   });
 });
 

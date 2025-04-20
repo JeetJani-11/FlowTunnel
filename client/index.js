@@ -114,6 +114,7 @@ function connectToServer(port) {
 async function handleLogin(token) {
   try {
     const response = await fetch(`${serverUrl}/login`, {
+      compress: false,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ apiKey: token }),
