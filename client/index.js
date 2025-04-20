@@ -75,7 +75,7 @@ function connectToServer(port) {
   socket.on("request", async (payload, acknowledge) => {
     const { correlationId, method, url, headers, body } = payload;
     console.log(`Received request ${correlationId}: ${method} ${url}`);
-
+    console.log(payload);
     try {
       const parsedUrl = new URL(`http://localhost:${port}${url}`);
       const response = await fetch(parsedUrl, {
@@ -83,7 +83,8 @@ function connectToServer(port) {
         headers,
         body: method !== "GET" && body ? JSON.stringify(body) : undefined,
       });
-
+      console.log("Response status:", response.status);
+      console.log("Response ", response);
       const buffer = await response.arrayBuffer();
       const bodyData = Buffer.from(buffer).toString("base64");
       acknowledge({

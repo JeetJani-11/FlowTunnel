@@ -121,7 +121,7 @@ app.all(/(.*)/, async (req, res) => {
     body: req.body,
     query: req.query,
   };
-  io.emit("request", payload, (result) => {
+  io.timeout(60000).emit("request", payload, (result) => {
     console.log("Received response for request:", correlationId);
     console.log("Response:", result);
     if (result.error) return res.status(502).send(result.error);
