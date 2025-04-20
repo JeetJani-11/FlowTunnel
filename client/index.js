@@ -87,6 +87,9 @@ function connectToServer(port) {
       console.log("Response ", response);
       const buffer = await response.arrayBuffer();
       const bodyData = Buffer.from(buffer).toString("base64");
+      console.log("Response body:", bodyData);
+      console.log("Response headers:", response.headers);
+      console.log("Response status:", response.status);
       acknowledge({
         status: response.status,
         headers: Object.fromEntries(response.headers.entries()),
