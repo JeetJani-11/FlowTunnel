@@ -1,17 +1,19 @@
 #!/usr/bin/env node
+const path = require('path');
 const readline = require("readline");
 const { io } = require("socket.io-client");
 const fetch = require("node-fetch");
 const { LocalStorage } = require("node-localstorage");
-const localStorage = new LocalStorage("./scratch");
+const baseDir = path.join(process.env.LOCALAPPDATA, 'MyTunnelCLI');
+const localStorage = new LocalStorage(path.join(baseDir, 'scratch'));
 
 let rl;
 let isConnected = false;
-const serverUrl = "http://44.202.48.12";
+const serverUrl = "http://18.206.40.226";
 let tried = false;
 
 function connectToServer(port) {
-  const socketUrl = `http://44.202.48.12:3000`;
+  const socketUrl = `http://18.206.40.226:3000`;
   const socket = io(socketUrl, {
     reconnection: true,
     reconnectionAttempts: 5,

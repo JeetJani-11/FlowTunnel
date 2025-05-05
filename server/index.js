@@ -12,7 +12,6 @@ import {
   query,
   where,
   getDocs,
-  Timestamp,
 } from "firebase/firestore";
 import dotenv from "dotenv";
 dotenv.config();
@@ -30,26 +29,27 @@ const firebaseApp =
   getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getFirestore(firebaseApp);
 
+const tunnelMap = new Map();
+
 const app = express();
 app.use(express.json());
 const server = http.createServer(app);
-
 const io = new SocketIO(server, {
   cors: { origin: "*" },
   maxHttpBufferSize: 300 * 1024 * 1024,
 });
 
 io.on("connection", (socket) => {
-  console.log("⚡ Socket.IO client connected:", socket.id);
+  console.log("Client connected:", socket.id);
 
   socket.on("login", ({ accessToken }) => {
     try {
-      const payload = jwt.verify(accessToken, process.env.JWT_SECRET);
-      const uid = payload.uid;
+      const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
       socket.data.uid = uid;
       socket.join(uid);
       socket.emit("message", { content: "Login successful" });
-    } catch {
+    } catch (err) {
+      console.warn("Auth failed:", err.message);
       socket.emit("message", { content: "Invalid access token" });
     }
   });
@@ -60,20 +60,19 @@ io.on("connection", (socket) => {
 });
 
 app.post("/login", async (req, res) => {
-  console.log("Login request received");
-  const apiKey = req.body.apiKey;
-  const rawKey = apiKey.slice(8);
+  const { apiKey } = req.body;
   if (!apiKey) return res.status(400).send("API key required");
+
   const prefix = apiKey.slice(0, 8);
-  console.log("Prefix:", prefix);
+  const rawKey = apiKey.slice(8);
+
   const snap = await getDocs(
     query(collection(db, "apiKeys"), where("prefix", "==", prefix))
   );
+
   let matchedUid = null;
   for (const doc of snap.docs) {
     const { hashed, uid } = doc.data();
-    console.log("Checking hashed key:", hashed);
-
     if (await bcrypt.compare(rawKey + process.env.TOKEN_PEPPER, hashed)) {
       matchedUid = uid;
       break;
@@ -87,34 +86,46 @@ app.post("/login", async (req, res) => {
   const refreshToken = jwt.sign({ uid: matchedUid }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
-  return res.json({ accessToken, refreshToken });
+
+  let subdomain = "";
+  if (tunnelMap.size > 0) {
+    const id = crypto.randomBytes(16).toString("hex");
+    subdomain = `${id}.18.206.40.226`;
+  }
+  tunnelMap.set(matchedUid, subdomain);
+
+  return res.json({
+    accessToken,
+    refreshToken,
+    subdomain: subdomain ? `http://${subdomain}` : "http://18.206.40.226",
+  });
 });
 
 app.post("/refreshToken", (req, res) => {
-  console.log("Refresh token request received");
-  console.log("Request body:", req.body);
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).send("Refresh token required");
   try {
-    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    const uid = payload.uid;
-    const newAccess = jwt.sign({ uid }, process.env.JWT_SECRET, {
+    const { uid } = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const accessToken = jwt.sign({ uid }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
     const newRefresh = jwt.sign({ uid }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-    return res.json({ accessToken: newAccess, refreshToken: newRefresh });
+    return res.json({ accessToken, refreshToken: newRefresh });
   } catch {
     return res.status(401).send("Invalid refresh token");
   }
 });
 
 app.all(/^\/(?!socket\.io).*/, async (req, res) => {
-  console.log("All request received:", req.method, req.originalUrl);
+  const host = req.headers.host || "";
+  const sub = host.split(".")[0];
+  const uid = [...tunnelMap.entries()].find(([, sd]) => sd === sub)?.[0];
+  if (!uid) return res.status(400).send("Invalid or expired tunnel");
+
   const correlationId = uuidv4();
   const payload = {
-    type: "request",
     correlationId,
     method: req.method,
     url: req.originalUrl,
@@ -122,23 +133,24 @@ app.all(/^\/(?!socket\.io).*/, async (req, res) => {
     body: req.body,
     query: req.query,
   };
-  io.timeout(60000).emit("request", payload, (error, result) => {
-    console.log(result);
-    if (error) return res.status(502).send(error);
-    const { status, headers, body } = result[0];
-    const forbidden = new Set([
-      "content-encoding",
-      "transfer-encoding",
-      "content-length",
-    ]);
-    for (let [k, v] of Object.entries(headers)) {
-      if (forbidden.has(k.toLowerCase())) continue;
-      res.setHeader(k, v);
-    }
-    res.status(status).send(body);
-  });
+
+  io.to(uid)
+    .timeout(60000)
+    .emit("request", payload, (err, results) => {
+      if (err) return res.status(502).send(err);
+      const { status, headers, body } = results[0];
+
+      for (const [k, v] of Object.entries(headers)) {
+        if (
+          !["content-encoding", "transfer-encoding", "content-length"].includes(
+            k.toLowerCase()
+          )
+        ) {
+          res.setHeader(k, v || "");
+        }
+      }
+      res.status(status).send(body);
+    });
 });
 
-server.listen(3000, () => {
-  console.log("HTTP+Socket.IO server listening on port 3000");
-});
+server.listen(3000, () => console.log("Server listening on port 3000"));
