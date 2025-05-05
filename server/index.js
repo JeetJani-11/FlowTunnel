@@ -119,8 +119,15 @@ app.post("/refreshToken", (req, res) => {
 });
 
 app.all(/^\/(?!socket\.io).*/, async (req, res) => {
+  console.log(req.headers);
+  console.log(req.headers.host);
   const host = req.headers.host || "";
+  console.log(host.split("."));
   const sub = host.split(".")[0];
+  console.log(sub);
+  tunnelMap.forEach((value, key) => {
+    console.log(key, value);
+  });
   const uid = [...tunnelMap.entries()].find(([, sd]) => sd === sub)?.[0];
   if (!uid) return res.status(400).send("Invalid or expired tunnel");
 
