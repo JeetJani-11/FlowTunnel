@@ -60,7 +60,9 @@ io.on("connection", (socket) => {
 });
 
 app.post("/login", async (req, res) => {
+  console.log("Login request received");
   const { apiKey } = req.body;
+  console.log("API Key:", apiKey);
   if (!apiKey) return res.status(400).send("API key required");
 
   const prefix = apiKey.slice(0, 8);
