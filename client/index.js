@@ -9,11 +9,11 @@ const localStorage = new LocalStorage(path.join(baseDir, 'scratch'));
 
 let rl;
 let isConnected = false;
-const serverUrl = "http://18.206.40.226";
+const serverUrl = "https://tunnel.jeetjani.xyz/";
 let tried = false;
 
 function connectToServer(port) {
-  const socketUrl = `http://18.206.40.226:3000`;
+  const socketUrl = `https://tunnel.jeetjani.xyz/:3000`;
   const socket = io(socketUrl, {
     reconnection: true,
     reconnectionAttempts: 5,

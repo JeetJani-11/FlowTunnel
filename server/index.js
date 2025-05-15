@@ -87,17 +87,13 @@ app.post("/login", async (req, res) => {
     expiresIn: "7d",
   });
 
-  let subdomain = "";
-  if (tunnelMap.size > 0) {
-    const id = crypto.randomBytes(16).toString("hex");
-    subdomain = `${id}.18.206.40.226`;
-  }
+  const subdomain = crypto.randomBytes(4).toString("hex");
   tunnelMap.set(matchedUid, subdomain);
 
   return res.json({
     accessToken,
     refreshToken,
-    subdomain: subdomain ? `http://${subdomain}` : "http://18.206.40.226",
+    subdomain: `https://${subdomain}.tunnel.jeetjani.xyz/`,
   });
 });
 
@@ -119,11 +115,11 @@ app.post("/refreshToken", (req, res) => {
 });
 
 app.all(/^\/(?!socket\.io).*/, async (req, res) => {
-  console.log(req.headers);
   console.log(req.headers.host);
-  const host = req.headers.host || "";
-  console.log(host.split("."));
-  const sub = host.split(".")[0];
+  const subdomainRegex = /^([^.]+)\.tunnel\.jeetjani\.xyz$/;
+  const match = (req.headers.host || "").match(subdomainRegex);
+  const sub = match?.[1];
+
   console.log(sub);
   tunnelMap.forEach((value, key) => {
     console.log(key, value);
