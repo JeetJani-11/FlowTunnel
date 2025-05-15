@@ -47,7 +47,11 @@ io.on("connection", (socket) => {
       const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
       socket.data.uid = uid;
       socket.join(uid);
-      socket.emit("message", { content: "Login successful" });
+      const subdomain = crypto.randomBytes(4).toString("hex");
+      tunnelMap.set(matchedUid, subdomain);
+      socket.emit("message", {
+        content: `Login successful. Visit : https://${subdomain}.tunnel.jeetjani.xyz/`,
+      });
     } catch (err) {
       console.warn("Auth failed:", err.message);
       socket.emit("message", { content: "Invalid access token" });
@@ -89,13 +93,9 @@ app.post("/login", async (req, res) => {
     expiresIn: "7d",
   });
 
-  const subdomain = crypto.randomBytes(4).toString("hex");
-  tunnelMap.set(matchedUid, subdomain);
-
   return res.json({
     accessToken,
     refreshToken,
-    subdomain: `https://${subdomain}.tunnel.jeetjani.xyz/`,
   });
 });
 

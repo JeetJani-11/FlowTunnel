@@ -9,110 +9,116 @@ const localStorage = new LocalStorage(path.join(baseDir, 'scratch'));
 
 let rl;
 let isConnected = false;
-const serverUrl = "https://tunnel.jeetjani.xyz/";
+const serverUrl = "https://tunnel.jeetjani.xyz";
 let tried = false;
 
 function connectToServer(port) {
-  const socketUrl = `https://tunnel.jeetjani.xyz/:3000`;
-  const socket = io(socketUrl, {
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
-  });
+  try {
+    const socketUrl = "https://tunnel.jeetjani.xyz";
 
-  mutePrompt();
-  console.log(`Connecting to ${socketUrl}...`);
-  console.log("Please wait...");
-
-  socket.on("connect", () => {
-    console.log("Connected to remote server!");
-    isConnected = true;
-
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      console.log("No access token in storage—please login.");
-      socket.disconnect();
-      isConnected = false;
-      unmutePrompt();
-      return;
-    }
-    socket.emit("login", { accessToken: token });
-    console.log("Logging in with token from storage…");
-  });
-
-  socket.on("message", async (message) => {
-    if (message.content === "Invalid access token") {
-      console.log("Invalid access token. Attempting refresh…");
-
-      if (tried) {
-        console.log("Refresh already attempted. Please login again.");
+    const socket = io(socketUrl, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
+  
+    mutePrompt();
+    console.log(`Connecting to ${socketUrl}...`);
+    console.log("Please wait...");
+  
+    socket.on("connect", () => {
+      console.log("Connected to remote server!");
+      isConnected = true;
+  
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        console.log("No access token in storage—please login.");
+        socket.disconnect();
+        isConnected = false;
         unmutePrompt();
         return;
       }
-      tried = true;
-
-      const storedRefresh = localStorage.getItem("refreshToken");
-      const response = await fetch(`${serverUrl}/refreshToken`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: storedRefresh }),
-      });
-
-      if (response.ok) {
-        const { accessToken: newAccess, refreshToken: newRefresh } =
-          await response.json();
-        localStorage.setItem("accessToken", newAccess);
-        localStorage.setItem("refreshToken", newRefresh);
-        console.log("Tokens refreshed successfully.");
-
-        // re-authenticate on the same socket
-        socket.emit("login", { accessToken: newAccess });
-        console.log("Re-authenticated with new token.");
-      } else {
-        console.log("Failed to refresh token:", response.statusText);
-        console.log("Please login again.");
-        unmutePrompt();
+      socket.emit("login", { accessToken: token });
+      console.log("Logging in with token from storage…");
+    });
+  
+    socket.on("message", async (message) => {
+      if (message.content === "Invalid access token") {
+        console.log("Invalid access token. Attempting refresh…");
+  
+        if (tried) {
+          console.log("Refresh already attempted. Please login again.");
+          unmutePrompt();
+          return;
+        }
+        tried = true;
+  
+        const storedRefresh = localStorage.getItem("refreshToken");
+        const response = await fetch(`${serverUrl}/refreshToken`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: storedRefresh }),
+        });
+  
+        if (response.ok) {
+          const { accessToken: newAccess, refreshToken: newRefresh } =
+            await response.json();
+          localStorage.setItem("accessToken", newAccess);
+          localStorage.setItem("refreshToken", newRefresh);
+          console.log("Tokens refreshed successfully.");
+  
+          // re-authenticate on the same socket
+          socket.emit("login", { accessToken: newAccess });
+          console.log("Re-authenticated with new token.");
+        } else {
+          console.log("Failed to refresh token:", response.statusText);
+          console.log("Please login again.");
+          unmutePrompt();
+        }
+        return;
       }
-      return;
-    }
-
-    // normal messages
-    console.log(message.content);
-  });
-
-  socket.on("request", async (payload, acknowledge) => {
-    const { correlationId, method, url, headers, body } = payload;
-    console.log(`Received request ${correlationId}: ${method} ${url}`);
-    try {
-      const parsedUrl = new URL(`http://localhost:${port}${url}`);
-      const response = await fetch(parsedUrl, {
-        method,
-        headers,
-        body: method !== "GET" && body ? JSON.stringify(body) : undefined,
-      });
-      const buffer = await response.arrayBuffer();
-      acknowledge({
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        body: Buffer.from(buffer),
-      });
-    } catch (err) {
-      console.error("Error handling request:", err);
-      acknowledge({ error: err.message });
-    }
-  });
-
-  socket.on("error", (err) => {
-    console.error(`Socket error: ${err.message}`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Disconnected from the server.");
-    isConnected = false;
-    setTimeout(() => unmutePrompt(), 200);
-  });
+  
+      // normal messages
+      console.log(message.content);
+    });
+  
+    socket.on("request", async (payload, acknowledge) => {
+      const { correlationId, method, url, headers, body } = payload;
+      console.log(`Received request ${correlationId}: ${method} ${url}`);
+      try {
+        const parsedUrl = new URL(`http://localhost:${port}${url}`);
+        const response = await fetch(parsedUrl, {
+          method,
+          headers,
+          body: method !== "GET" && body ? JSON.stringify(body) : undefined,
+        });
+        const buffer = await response.arrayBuffer();
+        acknowledge({
+          status: response.status,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: Buffer.from(buffer),
+        });
+      } catch (err) {
+        console.error("Error handling request:", err);
+        acknowledge({ error: err.message });
+      }
+    });
+  
+    socket.on("error", (err) => {
+      console.error(`Socket error: ${err.message}`);
+    });
+  
+    socket.on("disconnect", () => {
+      console.log("Disconnected from the server.");
+      isConnected = false;
+      setTimeout(() => unmutePrompt(), 200);
+    });
+  } catch (err) {
+    console.error("Connection error:", err);
+    unmutePrompt();
+  }
 }
 
 async function handleLogin(token) {
