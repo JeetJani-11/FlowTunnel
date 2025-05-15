@@ -48,7 +48,7 @@ io.on("connection", (socket) => {
       socket.data.uid = uid;
       socket.join(uid);
       const subdomain = crypto.randomBytes(4).toString("hex");
-      tunnelMap.set(matchedUid, subdomain);
+      tunnelMap.set(uid, subdomain);
       socket.emit("message", {
         content: `Login successful. Visit : https://${subdomain}.tunnel.jeetjani.xyz/`,
       });
