@@ -116,13 +116,16 @@ app.post("/refreshToken", (req, res) => {
   }
 });
 
-app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
+app.all(/^\/(?!socket\.io).*/, async (req, res) => {
+  console.log(req.headers.host);
   const subdomainRegex = /^([^.]+)\.tunnel\.jeetjani\.xyz$/;
   const match = (req.headers.host || "").match(subdomainRegex);
+  const sub = match?.[1];
 
-  if (!match) return next();
-
-  const sub = match[1];
+  console.log(sub);
+  tunnelMap.forEach((value, key) => {
+    console.log(key, value);
+  });
   const uid = [...tunnelMap.entries()].find(([, sd]) => sd === sub)?.[0];
   if (!uid) return res.status(400).send("Invalid or expired tunnel");
 
