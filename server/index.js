@@ -44,6 +44,7 @@ io.on("connection", (socket) => {
 
   socket.on("login", ({ accessToken }) => {
     try {
+      console.log("Login request received. Access token:", accessToken);
       const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
       socket.data.uid = uid;
       socket.join(uid);

@@ -34,7 +34,7 @@ function connectToServer(port) {
   
       const token = localStorage.getItem("accessToken");
       if (!token) {
-        console.log("No access token in storage—please login.");
+        console.log("To connect, please login with your API key.");
         socket.disconnect();
         isConnected = false;
         unmutePrompt();
@@ -65,10 +65,12 @@ function connectToServer(port) {
         if (response.ok) {
           const { accessToken: newAccess, refreshToken: newRefresh } =
             await response.json();
+          console.log("Old access token: ", localStorage.getItem("accessToken"));
+          console.log("Old access token expired. New tokens received.");
           localStorage.setItem("accessToken", newAccess);
           localStorage.setItem("refreshToken", newRefresh);
           console.log("Tokens refreshed successfully.");
-  
+          console.log("New access token: ", newAccess);
           // re-authenticate on the same socket
           socket.emit("login", { accessToken: newAccess });
           console.log("Re-authenticated with new token.");
@@ -134,7 +136,6 @@ async function handleLogin(token) {
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
       console.log("Login successful.");
-      // clear the refresh‑attempt flag so future invalidations can retry
       tried = false;
     } else {
       console.log("Login failed:", response.statusText);
