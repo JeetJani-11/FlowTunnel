@@ -14,7 +14,17 @@ import {
   getDocs,
 } from "firebase/firestore";
 import dotenv from "dotenv";
+import { createClient } from "redis";
 dotenv.config();
+const redisClient = createClient({
+  username: "default",
+  password: process.env.REDISPASS,
+  socket: {
+    host: process.env.REDISHOST,
+    port: 11140,
+  },
+});
+await redisClient.connect();
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -25,6 +35,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
+
+console.log("Firebase config:", firebaseConfig);
 const firebaseApp =
   getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getFirestore(firebaseApp);
@@ -42,14 +54,17 @@ const io = new SocketIO(server, {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
-  socket.on("login", ({ accessToken }) => {
+  socket.on("login", async({ accessToken }) => {
     try {
       console.log("Login request received. Access token:", accessToken);
       const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
+      if(redisClient.get(uid)) {
+        return socket.emit("message", { content: "Already logged in" });
+      }
       socket.data.uid = uid;
       socket.join(uid);
       const subdomain = crypto.randomBytes(4).toString("hex");
-      tunnelMap.set(uid, subdomain);
+      await redisClient.set(`${uid}`, subdomain)
       socket.emit("message", {
         content: `Login successful. Visit : https://${subdomain}.tunnel.jeetjani.xyz/`,
       });
@@ -59,7 +74,8 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async() => {
+    await redisClient.del(`${socket.data.uid}`);
     console.log("Client disconnected:", socket.id);
   });
 });
@@ -124,7 +140,7 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
   if (!match) return next();
 
   const sub = match[1];
-  const uid = [...tunnelMap.entries()].find(([, sd]) => sd === sub)?.[0];
+  const uid = await redisClient.get(sub);
   if (!uid) return res.status(400).send("Invalid or expired tunnel");
 
   const correlationId = uuidv4();

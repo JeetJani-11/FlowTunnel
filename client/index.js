@@ -1,223 +1,242 @@
 #!/usr/bin/env node
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 const readline = require("readline");
 const { io } = require("socket.io-client");
 const fetch = require("node-fetch");
 const { LocalStorage } = require("node-localstorage");
-const baseDir = path.join(process.env.LOCALAPPDATA, 'MyTunnelCLI');
-const localStorage = new LocalStorage(path.join(baseDir, 'scratch'));
+const kleur = require("kleur");
+
+
+const baseDir = path.join(
+  process.env.LOCALAPPDATA || process.cwd(),
+  "MyTunnelCLI"
+);
+fs.mkdirSync(baseDir, { recursive: true });
+const localStorage = new LocalStorage(path.join(baseDir, "scratch"));
 
 let rl;
 let isConnected = false;
+let socket;
 const serverUrl = "https://tunnel.jeetjani.xyz";
 let tried = false;
 
-function connectToServer(port) {
-  try {
-    const socketUrl = "https://tunnel.jeetjani.xyz";
 
-    const socket = io(socketUrl, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-    });
-  
-    mutePrompt();
-    console.log(`Connecting to ${socketUrl}...`);
-    console.log("Please wait...");
-  
-    socket.on("connect", () => {
-      console.log("Connected to remote server!");
-      isConnected = true;
-  
-      const token = localStorage.getItem("accessToken");
-      if (!token) {
-        console.log("To connect, please login with your API key.");
-        socket.disconnect();
-        isConnected = false;
-        unmutePrompt();
-        return;
-      }
-      socket.emit("login", { accessToken: token });
-      console.log("Logging in with token from storage…");
-    });
-  
-    socket.on("message", async (message) => {
-      if (message.content === "Invalid access token") {
-        console.log("Invalid access token. Attempting refresh…");
-  
-        if (tried) {
-          console.log("Refresh already attempted. Please login again.");
-          unmutePrompt();
-          return;
-        }
-        tried = true;
-  
-        const storedRefresh = localStorage.getItem("refreshToken");
-        const response = await fetch(`${serverUrl}/refreshToken`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: storedRefresh }),
-        });
-  
-        if (response.ok) {
-          const { accessToken: newAccess, refreshToken: newRefresh } =
-            await response.json();
-          console.log("Old access token: ", localStorage.getItem("accessToken"));
-          console.log("Old access token expired. New tokens received.");
-          localStorage.setItem("accessToken", newAccess);
-          localStorage.setItem("refreshToken", newRefresh);
-          console.log("Tokens refreshed successfully.");
-          console.log("New access token: ", newAccess);
-          // re-authenticate on the same socket
-          socket.emit("login", { accessToken: newAccess });
-          console.log("Re-authenticated with new token.");
-        } else {
-          console.log("Failed to refresh token:", response.statusText);
-          console.log("Please login again.");
-          unmutePrompt();
-        }
-        return;
-      }
-  
-      // normal messages
-      console.log(message.content);
-    });
-  
-    socket.on("request", async (payload, acknowledge) => {
-      const { correlationId, method, url, headers, body } = payload;
-      console.log(`Received request ${correlationId}: ${method} ${url}`);
-      try {
-        const parsedUrl = new URL(`http://localhost:${port}${url}`);
-        const response = await fetch(parsedUrl, {
-          method,
-          headers,
-          body: method !== "GET" && body ? JSON.stringify(body) : undefined,
-        });
-        const buffer = await response.arrayBuffer();
-        acknowledge({
-          status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-          body: Buffer.from(buffer),
-        });
-      } catch (err) {
-        console.error("Error handling request:", err);
-        acknowledge({ error: err.message });
-      }
-    });
-  
-    socket.on("error", (err) => {
-      console.error(`Socket error: ${err.message}`);
-    });
-  
-    socket.on("disconnect", () => {
-      console.log("Disconnected from the server.");
-      isConnected = false;
-      setTimeout(() => unmutePrompt(), 200);
-    });
-  } catch (err) {
-    console.error("Connection error:", err);
-    unmutePrompt();
-  }
+function createSpinner() {
+  const frames = ["|", "/", "-", "\\"];
+  let idx = 0,
+    interval;
+  const draw = (text) =>
+    process.stdout.write(
+      `\r${frames[(idx = (idx + 1) % frames.length)]} ${text}`
+    );
+  return {
+    start(text) {
+      draw(text);
+      interval = setInterval(() => draw(text), 100);
+    },
+    succeed(text) {
+      clearInterval(interval);
+      console.log(`\r${kleur.green("✔")} ${text}`);
+    },
+    warn(text) {
+      clearInterval(interval);
+      console.log(`\r${kleur.yellow("⚠")} ${text}`);
+    },
+  };
 }
 
 async function handleLogin(token) {
   try {
-    const response = await fetch(`${serverUrl}/login`, {
-      compress: false,
+    const res = await fetch(`${serverUrl}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ apiKey: token }),
     });
-    if (response.ok) {
-      const { accessToken, refreshToken } = await response.json();
+    if (res.ok) {
+      const { accessToken, refreshToken } = await res.json();
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
-      console.log("Login successful.");
+      console.log(kleur.green("Login successful."));
       tried = false;
     } else {
-      console.log("Login failed:", response.statusText);
+      console.log(kleur.red(`Login failed: ${res.statusText}`));
     }
   } catch (err) {
-    console.error("Login error:", err);
+    console.error(kleur.red("Login error:"), err);
   }
   rl.prompt();
 }
 
-function mutePrompt() {
-  rl.pause();
-  readline.moveCursor(process.stdout, 0, -1);
-  readline.clearLine(process.stdout, 0);
+function connectToServer(port) {
+  const spinner = createSpinner();
+  spinner.start(`Connecting to ${serverUrl} on port ${port}...`);
+
+  socket = io(serverUrl, {
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 20000,
+  });
+
+  socket.on("connect", () => {
+    spinner.succeed("Connected to remote server!");
+    isConnected = true;
+    authenticate();
+  });
+
+  socket.on("message", (msg) => handleSocketMessage(spinner, msg));
+  socket.on("request", (payload, ack) =>
+    handleProxyRequest(port, payload, ack)
+  );
+  socket.on("error", (err) =>
+    console.error(kleur.red(`Socket error: ${err.message}`))
+  );
+  socket.on("disconnect", () => {
+    console.log(kleur.yellow("Disconnected from server."));
+    isConnected = false;
+    rl.prompt();
+  });
 }
 
-function unmutePrompt() {
-  rl.resume();
-  rl.prompt(true);
+function authenticate() {
+  const token = localStorage.getItem("accessToken");
+  if (!token) {
+    console.log(
+      kleur.red("No access token found. Please log in with your API key.")
+    );
+    socket.disconnect();
+    return;
+  }
+  socket.emit("login", { accessToken: token });
+  console.log(kleur.cyan("Authenticating with stored token..."));
+}
+
+async function handleSocketMessage(spinner, message) {
+  if (message.content === "Invalid access token") {
+    spinner.warn("Invalid access token. Refreshing...");
+    if (tried) {
+      console.log(kleur.red("Refresh already attempted. Please log in again."));
+      rl.prompt();
+      return;
+    }
+    tried = true;
+    await refreshTokens();
+    return;
+  }
+  console.log(kleur.white(message.content));
+}
+
+async function refreshTokens() {
+  const storedRefresh = localStorage.getItem("refreshToken");
+  try {
+    const res = await fetch(`${serverUrl}/refreshToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: storedRefresh }),
+    });
+    if (res.ok) {
+      const { accessToken: newA, refreshToken: newR } = await res.json();
+      localStorage.setItem("accessToken", newA);
+      localStorage.setItem("refreshToken", newR);
+      console.log(kleur.green("Tokens refreshed successfully."));
+      socket.emit("login", { accessToken: newA });
+      console.log(kleur.cyan("Re-authenticated with new token."));
+    } else {
+      console.log(kleur.red(`Failed to refresh token: ${res.statusText}`));
+    }
+  } catch (err) {
+    console.error(kleur.red("Error refreshing tokens:"), err);
+  }
+  rl.prompt();
+}
+
+async function handleProxyRequest(port, payload, acknowledge) {
+  const { method, url, headers, body } = payload;
+  try {
+    const parsed = new URL(`http://localhost:${port}${url}`);
+    const opts = { method, headers };
+    if (method !== "GET" && body) opts.body = JSON.stringify(body);
+    const res = await fetch(parsed, opts);
+    const buf = await res.arrayBuffer();
+    acknowledge({
+      status: res.status,
+      headers: Object.fromEntries(res.headers.entries()),
+      body: Buffer.from(buf),
+    });
+    const log = `${method} ${url} -> ${res.status}`;
+    console.log(res.ok ? kleur.green(`✔ ${log}`) : kleur.red(`✖ ${log}`));
+  } catch (err) {
+    console.error(kleur.red("Error handling proxy request:"), err);
+    acknowledge({ error: err.message });
+  }
 }
 
 function launchCLI() {
   rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: "my-cli> ",
+    prompt: kleur.green("my-cli> "),
   });
 
-  console.log("Welcome to My Tunnel CLI!");
-  console.log(
-    'Type "connect [port]" to connect, "login [token]" to authenticate, "help" for commands, or "exit" to quit.\n'
-  );
+  rl.on("SIGINT", () => {
+    console.log(kleur.yellow("\nCaught Ctrl+C — disconnecting..."));
+    socket.disconnect();
+  });
 
+  console.log(kleur.cyan("🎉 Welcome to My Tunnel CLI! 🎉"));
+  console.log(kleur.white("Available commands:"));
+  console.log(kleur.yellow("  connect [port]  ") + "- Connect to the server");
+  console.log(
+    kleur.yellow("  login [token]   ") + "- Authenticate using API key"
+  );
+  console.log(kleur.yellow("  clear           ") + "- Clear the screen");
+  console.log(kleur.yellow("  help            ") + "- Show this help menu");
+  console.log(kleur.yellow("  exit            ") + "- Quit the CLI");
   rl.prompt();
 
   rl.on("line", (line) => {
-    const [command, arg] = line.trim().split(" ");
-    const lower = command.toLowerCase();
-
-    if (isConnected && lower !== "exit") {
-      console.log("Already connected. Type 'exit' to quit.");
-      rl.prompt();
-      return;
-    }
-
-    switch (lower) {
-      case "connect": {
-        const port = parseInt(arg, 10) || 8080;
-        console.log(`Attempting to connect on port ${port}...`);
-        connectToServer(port);
+    const [cmd, arg] = line.trim().split(" ");
+    switch (cmd.toLowerCase()) {
+      case "connect":
+        if (isConnected) {
+          console.log(
+            kleur.yellow("Already connected. Type Ctrl+C to disconnect.")
+          );
+        } else {
+          connectToServer(parseInt(arg, 10) || 8080);
+        }
         break;
-      }
-      case "login": {
+
+      case "login":
         if (!arg) {
-          console.log("Please provide a token.");
-          rl.prompt();
+          console.log(kleur.red("Please provide an API key."));
         } else {
           handleLogin(arg);
         }
         break;
-      }
-      case "help":
-        console.log("Commands available:");
-        console.log(
-          "  connect [port] - Connect to the server (default port: 8080)"
-        );
-        console.log("  login [token]  - Authenticate with Bearer token");
-        console.log("  exit           - Close the CLI");
-        rl.prompt();
+
+      case "clear":
+        console.clear();
         break;
+
+      case "help":
+        launchCLI();
+        break;
+
       case "exit":
-        console.log("Exiting CLI.");
+        console.log(kleur.cyan("Goodbye!"));
         rl.close();
         break;
+
       default:
-        console.log(`Unknown command: "${line.trim()}"`);
-        rl.prompt();
+        console.log(kleur.red(`Unknown command: "${line.trim()}"`));
     }
+    rl.prompt();
   });
 
   rl.on("close", () => {
-    console.log("CLI session ended.");
     process.exit(0);
   });
 }
