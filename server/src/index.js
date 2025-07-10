@@ -58,7 +58,9 @@ io.on("connection", (socket) => {
     try {
       console.log("Login request received. Access token:", accessToken);
       const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
-      if(redisClient.get(uid)) {
+      const existingSubdomain = await redisClient.get(`${uid}`);
+      console.log("Existing subdomain for UID:", uid, "is", existingSubdomain);
+      if(existingSubdomain !== null) {
         return socket.emit("message", { content: "Already logged in" });
       }
       socket.data.uid = uid;
