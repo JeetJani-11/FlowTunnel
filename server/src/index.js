@@ -146,6 +146,7 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
 
   const sub = match[1];
   const uid = await redisClient.get(sub);
+  console.log(`Subdomain: ${sub}, UID: ${uid}`);
   if (!uid) return res.status(400).send("Invalid or expired tunnel");
 
   const correlationId = uuidv4();
@@ -164,6 +165,9 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
       if (err) return res.status(502).send(err);
       const { status, headers, body } = results[0];
 
+      console.log(`Response for ${req.method} ${req.originalUrl} with status ${status}`);
+      console.log("Headers:", headers);
+      console.log("Body:", body);
       for (const [k, v] of Object.entries(headers)) {
         if (
           !["content-encoding", "transfer-encoding", "content-length"].includes(
@@ -173,6 +177,7 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
           res.setHeader(k, v || "");
         }
       }
+      console.log("Response headers set:", res.getHeaders());
       res.status(status).send(body);
     });
 });
