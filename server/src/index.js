@@ -66,7 +66,9 @@ io.on("connection", (socket) => {
       socket.data.uid = uid;
       socket.join(uid);
       const subdomain = crypto.randomBytes(4).toString("hex");
+      socket.data.subdomain = subdomain;
       await redisClient.set(`${uid}`, subdomain)
+      await redisClient.set(`${subdomain}`, uid)
       socket.emit("message", {
         content: `Login successful. Visit : https://${subdomain}.tunnel.jeetjani.xyz/`,
       });
@@ -78,6 +80,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", async() => {
     await redisClient.del(`${socket.data.uid}`);
+    await redisClient.del(`${socket.data.subdomain}`);
     console.log("Client disconnected:", socket.id);
   });
 });
