@@ -7,7 +7,6 @@ const fetch = require("node-fetch");
 const { LocalStorage } = require("node-localstorage");
 const kleur = require("kleur");
 
-
 const baseDir = path.join(
   process.env.LOCALAPPDATA || process.cwd(),
   "MyTunnelCLI"
@@ -20,7 +19,6 @@ let isConnected = false;
 let socket;
 const serverUrl = "https://tunnel.jeetjani.xyz";
 let tried = false;
-
 
 function createSpinner() {
   const frames = ["|", "/", "-", "\\"];
@@ -151,27 +149,68 @@ async function refreshTokens() {
   }
   rl.prompt();
 }
-
 async function handleProxyRequest(port, payload, acknowledge) {
-  const { method, url, headers, body } = payload;
   try {
-    const parsed = new URL(`http://localhost:${port}${url}`);
+    const { method, url, headers: orig, body } = payload;
+    console.log(kleur.cyan(`Handling proxy request: ${method} ${url}, port: ${port}`));
+
+    // 1. Whitelist only the headers your app truly needs,
+    //    plus preserve the original subdomain host if your code reads it.
+    const headers = {};
+    [
+      "authorization",
+      "accept",
+      "content-type",
+      "user-agent",
+      "cookie",
+      "origin",
+      "referer"
+    ].forEach((h) => {
+      if (orig[h]) headers[h] = orig[h];
+    });
+    // preserve the external subdomain so your Next code can still detect it
+    if (orig.host) {
+      headers["x-forwarded-host"] = orig.host;
+    }
+
+    // 2. Force the Host header to point at your local dev server
+    headers.host = `localhost:${port}`;
+    // 3. Tell your local service it can close when done
+    headers.connection = "close";
+
+    // 4. Build fetch options
     const opts = { method, headers };
-    if (method !== "GET" && body) opts.body = JSON.stringify(body);
-    const res = await fetch(parsed, opts);
+    if (method !== "GET" && body) {
+      opts.body = JSON.stringify(body);
+    }
+
+    // 5. Issue the request against 127.0.0.1
+    const target = new URL(url, `http://127.0.0.1:${port}`);
+    const res = await fetch(target.href, opts);
+
+    console.log("Response received:", res.status);
     const buf = await res.arrayBuffer();
+
+    // 6. Send the full response back through the tunnel
     acknowledge({
       status: res.status,
       headers: Object.fromEntries(res.headers.entries()),
       body: Buffer.from(buf),
     });
-    const log = `${method} ${url} -> ${res.status}`;
-    console.log(res.ok ? kleur.green(`✔ ${log}`) : kleur.red(`✖ ${log}`));
+
+    console.log(
+      res.ok
+        ? kleur.green(`✔ ${method} ${url} -> ${res.status}`)
+        : kleur.red(`✖ ${method} ${url} -> ${res.status}`)
+    );
   } catch (err) {
-    console.error(kleur.red("Error handling proxy request:"), err);
+    // Always acknowledge so your server never times out
+    console.error(kleur.red("Error handling proxy request:"), err.message);
     acknowledge({ error: err.message });
   }
 }
+
+
 
 function launchCLI() {
   rl = readline.createInterface({

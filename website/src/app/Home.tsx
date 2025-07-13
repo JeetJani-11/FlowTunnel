@@ -43,13 +43,16 @@ export default function Home() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
-        setLoading(false);
-      } else {
-        router.push("/login");
       }
+      setLoading(false);
     });
     return () => unsubscribe();
   }, [auth, router]);
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [loading, user, router]);
 
   useEffect(() => {
     const fetchTokens = async () => {
@@ -95,7 +98,7 @@ export default function Home() {
     }
   };
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <GradientBackground
         display="flex"

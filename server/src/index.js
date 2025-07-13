@@ -165,6 +165,10 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
       if (err) return res.status(502).send(err);
       const { status, headers, body } = results[0];
 
+      if (status === undefined || headers === undefined || body === undefined) {
+        console.error("Invalid response format:", results);
+        return res.status(502).send("Invalid response from server");
+      }
       console.log(`Response for ${req.method} ${req.originalUrl} with status ${status}`);
       console.log("Headers:", headers);
       console.log("Body:", body);
