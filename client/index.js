@@ -6,6 +6,7 @@ const { io } = require("socket.io-client");
 const fetch = require("node-fetch");
 const { LocalStorage } = require("node-localstorage");
 const kleur = require("kleur");
+const http = require("http");
 
 const baseDir = path.join(
   process.env.LOCALAPPDATA || process.cwd(),

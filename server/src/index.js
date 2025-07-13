@@ -177,8 +177,13 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
     .timeout(60000)
     .emit("request", payload, (err, results) => {
       if (err) return res.status(502).send(err);
+      console.log(`Received response for correlationId ${correlationId}`, results);
       const { status, headers, correlationId } = results[0];
 
+      console.log(`Received response for correlationId ${correlationId}:`, {
+        status,
+        headers,
+      });
       if (status === undefined || headers === undefined || !correlationId) {
         return res.status(502).send("Invalid response metadata");
       }
