@@ -1,5 +1,5 @@
 "use client";
-import firebase_app from "../../firebase/config";
+import { firebase_app } from "../../firebase/config";
 import React, { useState, FormEvent } from "react";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -35,9 +35,12 @@ const SignIn: React.FC = () => {
       );
       console.log("Signed in user:", userCredential.user);
       router.push("/");
-    } catch (error: any) {
-      const errorMessage: string = error.message;
-      console.error("Error:", errorMessage);
+    } catch (error: unknown) {
+      let errorMessage = "An unexpected error occurred";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      console.error("Error signing in:", error);
       setError(errorMessage);
     }
   };
@@ -107,11 +110,9 @@ const SignIn: React.FC = () => {
             Sign In
           </Button>
           <Grid container justifyContent="space-between">
-            <Grid item>
-              <Link href="/signUp" variant="body2" underline="hover">
-                Don't have an account? Sign Up
-              </Link>
-            </Grid>
+            <Link href="/signUp" variant="body2" underline="hover">
+              {"Don't have an account? Sign Up"}
+            </Link>
           </Grid>
         </Box>
       </Box>

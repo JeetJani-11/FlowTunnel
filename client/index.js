@@ -187,7 +187,7 @@ async function handleProxyRequest(port, payload, acknowledge) {
     try {
       req.write(body);
     } catch (e) {
-      req.write(JSON.stringify(body)); // fallback
+      req.write(JSON.stringify(body));
     }
   }
   req.end();

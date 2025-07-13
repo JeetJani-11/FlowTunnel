@@ -1,5 +1,5 @@
 "use client";
-import firebase_app from "../../firebase/config";
+import { firebase_app } from "../../firebase/config";
 import React, { useState, FormEvent } from "react";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -20,7 +20,7 @@ import {
 } from "firebase/auth";
 
 const SignUp: React.FC = () => {
-    const router = useRouter();
+  const router = useRouter();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
@@ -48,9 +48,12 @@ const SignUp: React.FC = () => {
 
       console.log("Registered user:", userCredential.user);
       router.push("/");
-    } catch (error: any) {
-      const errorMessage: string = error.message;
-      console.error("Error:", errorMessage);
+    } catch (error: unknown) {
+      let errorMessage = "An unexpected error occurred";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      console.error("Error signing in:", error);
       setError(errorMessage);
     }
   };
@@ -145,11 +148,9 @@ const SignUp: React.FC = () => {
             Sign Up
           </Button>
           <Grid container justifyContent="flex-end">
-            <Grid item>
-              <Link href="/login" variant="body2" underline="hover">
-                Already have an account? Sign In
-              </Link>
-            </Grid>
+            <Link href="/login" variant="body2" underline="hover">
+              {"Already have an account? Sign In"}
+            </Link>
           </Grid>
         </Box>
       </Box>

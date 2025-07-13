@@ -70,10 +70,16 @@ export default function DocsPage() {
             <h3 className="text-lg font-medium text-black-800 dark:text-black-100">
               Download the executable
             </h3>
-            <Button className="mt-4">
-              <Download className="mr-2 h-4 w-4" />
-              Download for Windows
-            </Button>
+            <a
+              href="/tunnel.exe"
+              download="TunnelPro-CLI.exe"
+              className="inline-block mt-4"
+            >
+              <Button>
+                <Download className="mr-2 h-4 w-4" />
+                Download for Windows
+              </Button>
+            </a>
           </div>
         </section>
 
