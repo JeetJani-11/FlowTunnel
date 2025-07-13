@@ -50,25 +50,39 @@ const io = new SocketIO(server, {
   cors: { origin: "*" },
   maxHttpBufferSize: 300 * 1024 * 1024,
 });
+const ongoingResponses = new Map();
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
-  socket.on("login", async({ accessToken }) => {
+  socket.on("response-chunk", (chunk, { correlationId }) => {
+    const res = ongoingResponses.get(correlationId);
+    if (res) res.write(chunk);
+  });
+
+  socket.on("response-end", ({ correlationId }) => {
+    const res = ongoingResponses.get(correlationId);
+    if (res) {
+      res.end();
+      ongoingResponses.delete(correlationId);
+    }
+  });
+
+  socket.on("login", async ({ accessToken }) => {
     try {
       console.log("Login request received. Access token:", accessToken);
       const { uid } = jwt.verify(accessToken, process.env.JWT_SECRET);
       const existingSubdomain = await redisClient.get(`${uid}`);
       console.log("Existing subdomain for UID:", uid, "is", existingSubdomain);
-      if(existingSubdomain !== null) {
+      if (existingSubdomain !== null) {
         return socket.emit("message", { content: "Already logged in" });
       }
       socket.data.uid = uid;
       socket.join(uid);
       const subdomain = crypto.randomBytes(4).toString("hex");
       socket.data.subdomain = subdomain;
-      await redisClient.set(`${uid}`, subdomain)
-      await redisClient.set(`${subdomain}`, uid)
+      await redisClient.set(`${uid}`, subdomain);
+      await redisClient.set(`${subdomain}`, uid);
       socket.emit("message", {
         content: `Login successful. Visit : https://${subdomain}.tunnel.jeetjani.xyz/`,
       });
@@ -78,7 +92,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", async() => {
+  socket.on("disconnect", async () => {
     await redisClient.del(`${socket.data.uid}`);
     await redisClient.del(`${socket.data.subdomain}`);
     console.log("Client disconnected:", socket.id);
@@ -163,15 +177,13 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
     .timeout(60000)
     .emit("request", payload, (err, results) => {
       if (err) return res.status(502).send(err);
-      const { status, headers, body } = results[0];
+      const { status, headers, correlationId } = results[0];
 
-      if (status === undefined || headers === undefined || body === undefined) {
-        console.error("Invalid response format:", results);
-        return res.status(502).send("Invalid response from server");
+      if (status === undefined || headers === undefined || !correlationId) {
+        return res.status(502).send("Invalid response metadata");
       }
-      console.log(`Response for ${req.method} ${req.originalUrl} with status ${status}`);
-      console.log("Headers:", headers);
-      console.log("Body:", body);
+
+      // Set headers
       for (const [k, v] of Object.entries(headers)) {
         if (
           !["content-encoding", "transfer-encoding", "content-length"].includes(
@@ -181,8 +193,9 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
           res.setHeader(k, v || "");
         }
       }
-      console.log("Response headers set:", res.getHeaders());
-      res.status(status).send(body);
+
+      res.status(status);
+      ongoingResponses.set(correlationId, res);
     });
 });
 

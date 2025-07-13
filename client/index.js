@@ -150,67 +150,39 @@ async function refreshTokens() {
   rl.prompt();
 }
 async function handleProxyRequest(port, payload, acknowledge) {
-  try {
-    const { method, url, headers: orig, body } = payload;
-    console.log(kleur.cyan(`Handling proxy request: ${method} ${url}, port: ${port}`));
+  const { correlationId, method, url, headers: orig, body } = payload;
+  const [hostname, portStr] = ["127.0.0.1", port];
+  const options = {
+    hostname,
+    port: portStr,
+    path: url,
+    method,
+    headers: {
+      ...orig,
+      host: `${hostname}:${port}`,
+      connection: "keep-alive",
+    },
+  };
 
-    // 1. Whitelist only the headers your app truly needs,
-    //    plus preserve the original subdomain host if your code reads it.
-    const headers = {};
-    [
-      "authorization",
-      "accept",
-      "content-type",
-      "user-agent",
-      "cookie",
-      "origin",
-      "referer"
-    ].forEach((h) => {
-      if (orig[h]) headers[h] = orig[h];
-    });
-    // preserve the external subdomain so your Next code can still detect it
-    if (orig.host) {
-      headers["x-forwarded-host"] = orig.host;
-    }
-
-    // 2. Force the Host header to point at your local dev server
-    headers.host = `localhost:${port}`;
-    // 3. Tell your local service it can close when done
-    headers.connection = "close";
-
-    // 4. Build fetch options
-    const opts = { method, headers };
-    if (method !== "GET" && body) {
-      opts.body = JSON.stringify(body);
-    }
-
-    // 5. Issue the request against 127.0.0.1
-    const target = new URL(url, `http://127.0.0.1:${port}`);
-    const res = await fetch(target.href, opts);
-
-    console.log("Response received:", res.status);
-    const buf = await res.arrayBuffer();
-
-    // 6. Send the full response back through the tunnel
-    acknowledge({
-      status: res.status,
-      headers: Object.fromEntries(res.headers.entries()),
-      body: Buffer.from(buf),
+  const req = http.request(options, (res) => {
+    acknowledge({ status: res.statusCode, headers: res.headers });
+    res.on("data", (chunk) => {
+      socket.emit("response-chunk", chunk, { correlationId });
     });
 
-    console.log(
-      res.ok
-        ? kleur.green(`✔ ${method} ${url} -> ${res.status}`)
-        : kleur.red(`✖ ${method} ${url} -> ${res.status}`)
-    );
-  } catch (err) {
-    // Always acknowledge so your server never times out
-    console.error(kleur.red("Error handling proxy request:"), err.message);
+    res.on("end", () => {
+      socket.emit("response-end", { correlationId });
+    });
+  });
+
+  req.on("error", (err) => {
     acknowledge({ error: err.message });
+  });
+  if (body && method !== "GET") {
+    req.write(JSON.stringify(body));
   }
+  req.end();
 }
-
-
 
 function launchCLI() {
   rl = readline.createInterface({
