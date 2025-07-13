@@ -178,7 +178,10 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
     .emit("request", payload, (err, results) => {
       if (err) return res.status(502).send(err);
       const { status, headers, correlationId } = results[0];
-      console.log(`Received response for correlationId ${correlationId}`, results);
+      console.log(
+        `Received response for correlationId ${correlationId}`,
+        results
+      );
 
       console.log(`Received response for correlationId ${correlationId}:`, {
         status,
@@ -188,15 +191,21 @@ app.all(/^\/(?!socket\.io).*/, async (req, res, next) => {
         return res.status(502).send("Invalid response metadata");
       }
 
-      // Set headers
+      const HOP_BY_HOP = [
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+      ];
       for (const [k, v] of Object.entries(headers)) {
-        if (
-          !["content-encoding", "transfer-encoding", "content-length"].includes(
-            k.toLowerCase()
-          )
-        ) {
-          res.setHeader(k, v || "");
-        }
+        if (k.toLowerCase() === "content-length") continue; // chunked
+        if (HOP_BY_HOP.includes(k.toLowerCase())) continue; // per‑RFC
+        // everything else—including content-type & content-encoding—gets forwarded
+        res.setHeader(k, v);
       }
 
       res.status(status);

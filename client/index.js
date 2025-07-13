@@ -166,7 +166,11 @@ async function handleProxyRequest(port, payload, acknowledge) {
   };
 
   const req = http.request(options, (res) => {
-    acknowledge({ status: res.statusCode, headers: res.headers });
+    acknowledge({
+      status: res.statusCode,
+      headers: res.headers,
+      correlationId,
+    });
     res.on("data", (chunk) => {
       socket.emit("response-chunk", chunk, { correlationId });
     });
@@ -180,7 +184,11 @@ async function handleProxyRequest(port, payload, acknowledge) {
     acknowledge({ error: err.message });
   });
   if (body && method !== "GET") {
-    req.write(JSON.stringify(body));
+    try {
+      req.write(body);
+    } catch (e) {
+      req.write(JSON.stringify(body)); // fallback
+    }
   }
   req.end();
 }
