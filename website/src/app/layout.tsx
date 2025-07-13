@@ -8,7 +8,7 @@ import { Navbar } from "@/components/ui/navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "TunnelPro – Secure Tunnels",
+  title: "FLow Tunnel – Secure Tunnels",
   description:
     "Expose your local web server to the internet with secure tunnels.",
 };

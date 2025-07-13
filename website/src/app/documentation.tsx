@@ -54,7 +54,7 @@ export default function DocsPage() {
             Documentation
           </h1>
           <p className="mt-2 text-black-600 dark:text-black-400">
-            Learn how to use TunnelPro to expose your local services
+            Learn how to use Flow Tunnel to expose your local services
           </p>
         </section>
 
@@ -63,7 +63,7 @@ export default function DocsPage() {
             Installation
           </h2>
           <p className="mt-4 text-black dark:text-black-300">
-            TunnelPro CLI is available for Windows only. Download the
+            Flow Tunnel CLI is available for Windows only. Download the
             appropriate version for your operating system.
           </p>
           <div className="mt-6">
@@ -72,7 +72,7 @@ export default function DocsPage() {
             </h3>
             <a
               href="/tunnel.exe"
-              download="TunnelPro-CLI.exe"
+              download="Flow-Tunnel-CLI.exe"
               className="inline-block mt-4"
             >
               <Button>
@@ -88,12 +88,12 @@ export default function DocsPage() {
             Authentication
           </h2>
           <p className="mt-4 text-black dark:text-black-300">
-            Before using TunnelPro, you need to authenticate with your API key.
+            Before using Flow Tunnel, you need to authenticate with your API key.
             You can find your API key in your dashboard.
           </p>
           <pre className="mt-4 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
             <code className="text-white dark:text-white">
-              tunnelpro login YOUR_API_KEY
+              login YOUR_API_KEY
             </code>
           </pre>
           <p className="mt-2 text-black dark:text-black-300">
@@ -115,7 +115,7 @@ export default function DocsPage() {
           </p>
           <pre className="mt-4 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
             <code className="text-white dark:text-white">
-              tunnelpro connect 8080
+              connect 8080
             </code>
           </pre>
           <p className="mt-2 text-black dark:text-black-300">
@@ -141,7 +141,7 @@ Press Ctrl+C to stop the tunnel`}
             CLI Commands
           </h2>
           <p className="mt-4 text-black dark:text-black-300">
-            TunnelPro CLI provides several commands to manage your tunnels.
+            Flow Tunnel CLI provides several commands to manage your tunnels.
           </p>
 
           <div className="mt-6 space-y-8">
@@ -157,7 +157,7 @@ Press Ctrl+C to stop the tunnel`}
                   {desc}
                 </p>
                 <pre className="mt-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
-                  <code className="text-white dark:text-white">{`tunnelpro ${cmd} ${
+                  <code className="text-white dark:text-white">{`${cmd} ${
                     cmd === "connect" ? "PORT" : "YOUR_API_KEY"
                   }`}</code>
                 </pre>
